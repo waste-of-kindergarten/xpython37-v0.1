@@ -1,4 +1,4 @@
-.. highlightlang:: c
+.. highlight:: c
 
 .. _defining-new-types:
 
@@ -67,8 +67,8 @@ The first bit is::
 This is what a Custom object will contain.  ``PyObject_HEAD`` is mandatory
 at the start of each object struct and defines a field called ``ob_base``
 of type :c:type:`PyObject`, containing a pointer to a type object and a
-reference count (these can be accessed using the macros :c:macro:`Py_REFCNT`
-and :c:macro:`Py_TYPE` respectively).  The reason for the macro is to
+reference count (these can be accessed using the macros :c:macro:`Py_TYPE`
+and :c:macro:`Py_REFCNT` respectively).  The reason for the macro is to
 abstract away the layout and to enable additional fields in debug builds.
 
 .. note::
@@ -89,7 +89,7 @@ The second bit is the definition of the type object. ::
    static PyTypeObject CustomType = {
        PyVarObject_HEAD_INIT(NULL, 0)
        .tp_name = "custom.Custom",
-       .tp_doc = "Custom objects",
+       .tp_doc = PyDoc_STR("Custom objects"),
        .tp_basicsize = sizeof(CustomObject),
        .tp_itemsize = 0,
        .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -160,7 +160,7 @@ you will need to OR the corresponding flags.
 
 We provide a doc string for the type in :c:member:`~PyTypeObject.tp_doc`. ::
 
-   .tp_doc = "Custom objects",
+   .tp_doc = PyDoc_STR("Custom objects"),
 
 To enable object creation, we have to provide a :c:member:`~PyTypeObject.tp_new`
 handler.  This is the equivalent of the Python method :meth:`__new__`, but
@@ -416,7 +416,7 @@ But this would be risky.  Our type doesn't restrict the type of the
 ``first`` member, so it could be any kind of object.  It could have a
 destructor that causes code to be executed that tries to access the
 ``first`` member; or that destructor could release the
-:term:`Global interpreter Lock` and let arbitrary code run in other
+:term:`Global interpreter Lock <GIL>` and let arbitrary code run in other
 threads that accesses and modifies our object.
 
 To be paranoid and protect ourselves against this possibility, we almost
@@ -463,7 +463,7 @@ We define a single method, :meth:`Custom.name()`, that outputs the objects name 
 concatenation of the first and last names. ::
 
    static PyObject *
-   Custom_name(CustomObject *self)
+   Custom_name(CustomObject *self, PyObject *Py_UNUSED(ignored))
    {
        if (self->first == NULL) {
            PyErr_SetString(PyExc_AttributeError, "first");

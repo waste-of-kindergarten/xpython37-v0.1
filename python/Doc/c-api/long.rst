@@ -1,4 +1,4 @@
-.. highlightlang:: c
+.. highlight:: c
 
 .. _longobjects:
 
@@ -27,13 +27,13 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
 .. c:function:: int PyLong_Check(PyObject *p)
 
    Return true if its argument is a :c:type:`PyLongObject` or a subtype of
-   :c:type:`PyLongObject`.
+   :c:type:`PyLongObject`.  This function always succeeds.
 
 
 .. c:function:: int PyLong_CheckExact(PyObject *p)
 
    Return true if its argument is a :c:type:`PyLongObject`, but not a subtype of
-   :c:type:`PyLongObject`.
+   :c:type:`PyLongObject`.  This function always succeeds.
 
 
 .. c:function:: PyObject* PyLong_FromLong(long v)
@@ -41,10 +41,8 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
    Return a new :c:type:`PyLongObject` object from *v*, or ``NULL`` on failure.
 
    The current implementation keeps an array of integer objects for all integers
-   between ``-5`` and ``256``, when you create an int in that range you actually
-   just get back a reference to the existing object. So it should be possible to
-   change the value of ``1``.  I suspect the behaviour of Python in this case is
-   undefined. :-)
+   between ``-5`` and ``256``. When you create an int in that range you actually
+   just get back a reference to the existing object.
 
 
 .. c:function:: PyObject* PyLong_FromUnsignedLong(unsigned long v)
@@ -98,11 +96,9 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
 .. c:function:: PyObject* PyLong_FromUnicode(Py_UNICODE *u, Py_ssize_t length, int base)
 
-   Convert a sequence of Unicode digits to a Python integer value.  The Unicode
-   string is first encoded to a byte string using :c:func:`PyUnicode_EncodeDecimal`
-   and then converted using :c:func:`PyLong_FromString`.
+   Convert a sequence of Unicode digits to a Python integer value.
 
-   .. deprecated-removed:: 3.3 4.0
+   .. deprecated-removed:: 3.3 3.10
       Part of the old-style :c:type:`Py_UNICODE` API; please migrate to using
       :c:func:`PyLong_FromUnicodeObject`.
 
@@ -110,9 +106,7 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
 .. c:function:: PyObject* PyLong_FromUnicodeObject(PyObject *u, int base)
 
    Convert a sequence of Unicode digits in the string *u* to a Python integer
-   value.  The Unicode string is first encoded to a byte string using
-   :c:func:`PyUnicode_EncodeDecimal` and then converted using
-   :c:func:`PyLong_FromString`.
+   value.
 
    .. versionadded:: 3.3
 
@@ -131,20 +125,28 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
       single: OverflowError (built-in exception)
 
    Return a C :c:type:`long` representation of *obj*.  If *obj* is not an
-   instance of :c:type:`PyLongObject`, first call its :meth:`__int__` method
-   (if present) to convert it to a :c:type:`PyLongObject`.
+   instance of :c:type:`PyLongObject`, first call its :meth:`__index__` or
+   :meth:`__int__` method (if present) to convert it to a
+   :c:type:`PyLongObject`.
 
    Raise :exc:`OverflowError` if the value of *obj* is out of range for a
    :c:type:`long`.
 
    Returns ``-1`` on error.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
+
 
 .. c:function:: long PyLong_AsLongAndOverflow(PyObject *obj, int *overflow)
 
    Return a C :c:type:`long` representation of *obj*.  If *obj* is not an
-   instance of :c:type:`PyLongObject`, first call its :meth:`__int__` method
-   (if present) to convert it to a :c:type:`PyLongObject`.
+   instance of :c:type:`PyLongObject`, first call its :meth:`__index__` or
+   :meth:`__int__` method (if present) to convert it to a
+   :c:type:`PyLongObject`.
 
    If the value of *obj* is greater than :const:`LONG_MAX` or less than
    :const:`LONG_MIN`, set *\*overflow* to ``1`` or ``-1``, respectively, and
@@ -153,6 +155,12 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
    Returns ``-1`` on error.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
+
 
 .. c:function:: long long PyLong_AsLongLong(PyObject *obj)
 
@@ -160,29 +168,43 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
       single: OverflowError (built-in exception)
 
    Return a C :c:type:`long long` representation of *obj*.  If *obj* is not an
-   instance of :c:type:`PyLongObject`, first call its :meth:`__int__` method
-   (if present) to convert it to a :c:type:`PyLongObject`.
+   instance of :c:type:`PyLongObject`, first call its :meth:`__index__` or
+   :meth:`__int__` method (if present) to convert it to a
+   :c:type:`PyLongObject`.
 
    Raise :exc:`OverflowError` if the value of *obj* is out of range for a
    :c:type:`long long`.
 
    Returns ``-1`` on error.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
+
 
 .. c:function:: long long PyLong_AsLongLongAndOverflow(PyObject *obj, int *overflow)
 
    Return a C :c:type:`long long` representation of *obj*.  If *obj* is not an
-   instance of :c:type:`PyLongObject`, first call its :meth:`__int__` method
-   (if present) to convert it to a :c:type:`PyLongObject`.
+   instance of :c:type:`PyLongObject`, first call its :meth:`__index__` or
+   :meth:`__int__` method (if present) to convert it to a
+   :c:type:`PyLongObject`.
 
-   If the value of *obj* is greater than :const:`PY_LLONG_MAX` or less than
-   :const:`PY_LLONG_MIN`, set *\*overflow* to ``1`` or ``-1``, respectively,
+   If the value of *obj* is greater than :const:`LLONG_MAX` or less than
+   :const:`LLONG_MIN`, set *\*overflow* to ``1`` or ``-1``, respectively,
    and return ``-1``; otherwise, set *\*overflow* to ``0``.  If any other
    exception occurs set *\*overflow* to ``0`` and return ``-1`` as usual.
 
    Returns ``-1`` on error.  Use :c:func:`PyErr_Occurred` to disambiguate.
 
    .. versionadded:: 3.2
+
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
 
 
 .. c:function:: Py_ssize_t PyLong_AsSsize_t(PyObject *pylong)
@@ -253,8 +275,9 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
 .. c:function:: unsigned long PyLong_AsUnsignedLongMask(PyObject *obj)
 
    Return a C :c:type:`unsigned long` representation of *obj*.  If *obj*
-   is not an instance of :c:type:`PyLongObject`, first call its :meth:`__int__`
-   method (if present) to convert it to a :c:type:`PyLongObject`.
+   is not an instance of :c:type:`PyLongObject`, first call its
+   :meth:`__index__` or :meth:`__int__` method (if present) to convert
+   it to a :c:type:`PyLongObject`.
 
    If the value of *obj* is out of range for an :c:type:`unsigned long`,
    return the reduction of that value modulo ``ULONG_MAX + 1``.
@@ -262,18 +285,31 @@ distinguished from a number.  Use :c:func:`PyErr_Occurred` to disambiguate.
    Returns ``(unsigned long)-1`` on error.  Use :c:func:`PyErr_Occurred` to
    disambiguate.
 
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
+
 
 .. c:function:: unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *obj)
 
    Return a C :c:type:`unsigned long long` representation of *obj*.  If *obj*
-   is not an instance of :c:type:`PyLongObject`, first call its :meth:`__int__`
-   method (if present) to convert it to a :c:type:`PyLongObject`.
+   is not an instance of :c:type:`PyLongObject`, first call its
+   :meth:`__index__` or :meth:`__int__` method (if present) to convert
+   it to a :c:type:`PyLongObject`.
 
    If the value of *obj* is out of range for an :c:type:`unsigned long long`,
-   return the reduction of that value modulo ``PY_ULLONG_MAX + 1``.
+   return the reduction of that value modulo ``ULLONG_MAX + 1``.
 
    Returns ``(unsigned long long)-1`` on error.  Use :c:func:`PyErr_Occurred`
    to disambiguate.
+
+   .. versionchanged:: 3.8
+      Use :meth:`__index__` if available.
+
+   .. deprecated:: 3.8
+      Using :meth:`__int__` is deprecated.
 
 
 .. c:function:: double PyLong_AsDouble(PyObject *pylong)

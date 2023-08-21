@@ -26,6 +26,7 @@
 #ifndef PSYCOPG_MICROPROTOCOLS_H
 #define PSYCOPG_MICROPROTOCOLS_H 1
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 /** the names of the three mandatory methods **/
@@ -46,6 +47,6 @@ extern PyObject *pysqlite_microprotocols_adapt(
 extern PyObject *
     pysqlite_adapt(pysqlite_Cursor* self, PyObject *args);
 #define pysqlite_adapt_doc \
-    "adapt(obj, protocol, alternate) -> adapt obj to given protocol. Non-standard."
+    "adapt(obj, protocol, alternate) -> adapt obj to given protocol."
 
 #endif /* !defined(PSYCOPG_MICROPROTOCOLS_H) */

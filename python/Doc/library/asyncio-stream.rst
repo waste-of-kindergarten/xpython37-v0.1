@@ -6,6 +6,10 @@
 Streams
 =======
 
+**Source code:** :source:`Lib/asyncio/streams.py`
+
+-------------------------------------------------
+
 Streams are high-level async/await-ready primitives to work with
 network connections.  Streams allow sending and receiving data without
 using callbacks or low-level protocols and transports.
@@ -23,6 +27,7 @@ streams::
 
         print(f'Send: {message!r}')
         writer.write(message.encode())
+        await writer.drain()
 
         data = await reader.read(100)
         print(f'Received: {data.decode()!r}')
@@ -43,10 +48,11 @@ The following top-level asyncio functions can be used to create
 and work with streams:
 
 
-.. coroutinefunction:: open_connection(host=None, port=None, \*, \
+.. coroutinefunction:: open_connection(host=None, port=None, *, \
                           loop=None, limit=None, ssl=None, family=0, \
                           proto=0, flags=0, sock=None, local_addr=None, \
-                          server_hostname=None, ssl_handshake_timeout=None)
+                          server_hostname=None, ssl_handshake_timeout=None, \
+                          happy_eyeballs_delay=None, interleave=None)
 
    Establish a network connection and return a pair of
    ``(reader, writer)`` objects.
@@ -68,8 +74,12 @@ and work with streams:
 
       The *ssl_handshake_timeout* parameter.
 
+   .. versionadded:: 3.8
+
+      Added *happy_eyeballs_delay* and *interleave* parameters.
+
 .. coroutinefunction:: start_server(client_connected_cb, host=None, \
-                          port=None, \*, loop=None, limit=None, \
+                          port=None, *, loop=None, limit=None, \
                           family=socket.AF_UNSPEC, \
                           flags=socket.AI_PASSIVE, sock=None, \
                           backlog=100, ssl=None, reuse_address=None, \
@@ -104,7 +114,7 @@ and work with streams:
 
 .. rubric:: Unix Sockets
 
-.. coroutinefunction:: open_unix_connection(path=None, \*, loop=None, \
+.. coroutinefunction:: open_unix_connection(path=None, *, loop=None, \
                         limit=None, ssl=None, sock=None, \
                         server_hostname=None, ssl_handshake_timeout=None)
 
@@ -127,7 +137,7 @@ and work with streams:
 
 
 .. coroutinefunction:: start_unix_server(client_connected_cb, path=None, \
-                          \*, loop=None, limit=None, sock=None, \
+                          *, loop=None, limit=None, sock=None, \
                           backlog=100, ssl=None, ssl_handshake_timeout=None, \
                           start_serving=True)
 
@@ -146,9 +156,6 @@ and work with streams:
    .. versionchanged:: 3.7
 
       The *path* parameter can now be a :term:`path-like object`.
-
-
----------
 
 
 StreamReader
@@ -227,6 +234,38 @@ StreamWriter
    directly; use :func:`open_connection` and :func:`start_server`
    instead.
 
+   .. method:: write(data)
+
+      The method attempts to write the *data* to the underlying socket immediately.
+      If that fails, the data is queued in an internal write buffer until it can be
+      sent.
+
+      The method should be used along with the ``drain()`` method::
+
+         stream.write(data)
+         await stream.drain()
+
+   .. method:: writelines(data)
+
+      The method writes a list (or any iterable) of bytes to the underlying socket
+      immediately.
+      If that fails, the data is queued in an internal write buffer until it can be
+      sent.
+
+      The method should be used along with the ``drain()`` method::
+
+         stream.writelines(lines)
+         await stream.drain()
+
+   .. method:: close()
+
+      The method closes the stream and the underlying socket.
+
+      The method should be used along with the ``wait_closed()`` method::
+
+         stream.close()
+         await stream.wait_closed()
+
    .. method:: can_write_eof()
 
       Return ``True`` if the underlying transport supports
@@ -246,20 +285,6 @@ StreamWriter
       Access optional transport information; see
       :meth:`BaseTransport.get_extra_info` for details.
 
-   .. method:: write(data)
-
-      Write *data* to the stream.
-
-      This method is not subject to flow control.  Calls to ``write()`` should
-      be followed by :meth:`drain`.
-
-   .. method:: writelines(data)
-
-      Write a list (or any iterable) of bytes to the stream.
-
-      This method is not subject to flow control. Calls to ``writelines()``
-      should be followed by :meth:`drain`.
-
    .. coroutinemethod:: drain()
 
       Wait until it is appropriate to resume writing to the stream.
@@ -274,10 +299,6 @@ StreamWriter
       buffer is drained down to the low watermark and writing can
       be resumed.  When there is nothing to wait for, the :meth:`drain`
       returns immediately.
-
-   .. method:: close()
-
-      Close the stream.
 
    .. method:: is_closing()
 
@@ -357,8 +378,8 @@ TCP echo server using the :func:`asyncio.start_server` function::
         server = await asyncio.start_server(
             handle_echo, '127.0.0.1', 8888)
 
-        addr = server.sockets[0].getsockname()
-        print(f'Serving on {addr}')
+        addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+        print(f'Serving on {addrs}')
 
         async with server:
             await server.serve_forever()

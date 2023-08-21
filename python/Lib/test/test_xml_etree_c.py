@@ -130,10 +130,8 @@ class MiscTests(unittest.TestCase):
                 return ''
         self.assertRaises(ValueError, parser._parse_whole, MockFile())
         self.assertRaises(ValueError, parser._setevents, None)
-        with self.assertRaises(ValueError):
-            parser.entity
-        with self.assertRaises(ValueError):
-            parser.target
+        self.assertIsNone(parser.entity)
+        self.assertIsNone(parser.target)
 
     def test_setstate_leaks(self):
         # Test reference leaks
@@ -170,6 +168,18 @@ class MiscTests(unittest.TestCase):
         parser.feed(XML)
         del parser
         support.gc_collect()
+
+    def test_dict_disappearing_during_get_item(self):
+        # test fix for seg fault reported in issue 27946
+        class X:
+            def __hash__(self):
+                e.attrib = {} # this frees e->extra->attrib
+                [{i: i} for i in range(1000)] # exhaust the dict keys cache
+                return 13
+
+        e = cET.Element("elem", {1: 2})
+        r = e.get(X())
+        self.assertIsNone(r)
 
 
 @unittest.skipUnless(cET, 'requires _elementtree')

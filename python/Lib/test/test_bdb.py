@@ -726,9 +726,16 @@ class StateTestCase(BaseTestCase):
                 ('line', 2, 'tfunc_import'), ('step', ),
                 ('line', 3, 'tfunc_import'), ('quit', ),
             ]
-            skip = ('importlib*', TEST_MODULE)
+            skip = ('importlib*', 'zipimport', 'encodings.*', TEST_MODULE)
             with TracerRun(self, skip=skip) as tracer:
                 tracer.runcall(tfunc_import)
+
+    def test_skip_with_no_name_module(self):
+        # some frames have `globals` with no `__name__`
+        # for instance the second frame in this traceback
+        # exec(compile('raise ValueError()', '', 'exec'), {})
+        bdb = Bdb(skip=['anything*'])
+        self.assertIs(bdb.is_skipped_module(None), False)
 
     def test_down(self):
         # Check that set_down() raises BdbError at the newest frame.
@@ -1142,13 +1149,6 @@ class IssuesTestCase(BaseTestCase):
             with TracerRun(self) as tracer:
                 tracer.runcall(tfunc_import)
 
-def test_main():
-    test.support.run_unittest(
-        StateTestCase,
-        RunTestCase,
-        BreakpointTestCase,
-        IssuesTestCase,
-    )
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

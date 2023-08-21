@@ -18,7 +18,7 @@
 This module provides access to Transport Layer Security (often known as "Secure
 Sockets Layer") encryption and peer authentication facilities for network
 sockets, both client-side and server-side.  This module uses the OpenSSL
-library. It is available on all modern Unix systems, Windows, Mac OS X, and
+library. It is available on all modern Unix systems, Windows, macOS, and
 probably additional platforms, as long as OpenSSL is installed on that platform.
 
 .. note::
@@ -139,6 +139,10 @@ purposes.
    *cadata* is given) or uses :meth:`SSLContext.load_default_certs` to load
    default CA certificates.
 
+   When :attr:`~SSLContext.keylog_filename` is supported and the environment
+   variable :envvar:`SSLKEYLOGFILE` is set, :func:`create_default_context`
+   enables key logging.
+
    .. note::
       The protocol, options, cipher and other settings may change to more
       restrictive values anytime without prior deprecation.  The values
@@ -171,6 +175,10 @@ purposes.
      ChaCha20/Poly1305 was added to the default cipher string.
 
      3DES was dropped from the default cipher string.
+
+   .. versionchanged:: 3.8
+
+      Support for key logging to :envvar:`SSLKEYLOGFILE` was added.
 
 
 Exceptions
@@ -285,7 +293,7 @@ Random generation
    Read the Wikipedia article, `Cryptographically secure pseudorandom number
    generator (CSPRNG)
    <https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator>`_,
-   to get the requirements of a cryptographically generator.
+   to get the requirements of a cryptographically strong generator.
 
    .. versionadded:: 3.3
 
@@ -607,7 +615,7 @@ Constants
    Possible value for :attr:`SSLContext.verify_flags`. In this mode, only the
    peer cert is checked but none of the intermediate CA certificates. The mode
    requires a valid CRL that is signed by the peer cert's issuer (its direct
-   ancestor CA). If no proper CRL has has been loaded with
+   ancestor CA). If no proper CRL has been loaded with
    :attr:`SSLContext.load_verify_locations`, validation will fail.
 
    .. versionadded:: 3.4
@@ -878,6 +886,14 @@ Constants
 
    .. versionadded:: 3.6
 
+.. data:: OP_IGNORE_UNEXPECTED_EOF
+
+   Ignore unexpected shutdown of TLS connections.
+
+   This option is only available with OpenSSL 3.0.0 and later.
+
+   .. versionadded:: 3.10
+
 .. data:: HAS_ALPN
 
    Whether the OpenSSL library has built-in support for the *Application-Layer
@@ -1055,6 +1071,7 @@ Constants
 .. attribute:: TLSVersion.TLSv1_3
 
    SSL 3.0 to TLS 1.3.
+
 
 SSL Sockets
 -----------
@@ -1247,7 +1264,7 @@ SSL sockets also have the following additional methods and attributes:
       The returned dictionary includes additional X509v3 extension items
         such as ``crlDistributionPoints``, ``caIssuers`` and ``OCSP`` URIs.
 
-   .. versionchanged:: 3.7.6
+   .. versionchanged:: 3.9
       IPv6 address strings no longer have a trailing new line.
 
 .. method:: SSLSocket.cipher()
@@ -1335,12 +1352,12 @@ SSL sockets also have the following additional methods and attributes:
       Only available with OpenSSL 1.1.1 and TLS 1.3 enabled. Without TLS 1.3
       support, the method raises :exc:`NotImplementedError`.
 
-   .. versionadded:: 3.7.1
+   .. versionadded:: 3.8
 
 .. method:: SSLSocket.version()
 
    Return the actual SSL protocol version negotiated by the connection
-   as a string, or ``None`` is no secure connection is established.
+   as a string, or ``None`` if no secure connection is established.
    As of this writing, possible return values include ``"SSLv2"``,
    ``"SSLv3"``, ``"TLSv1"``, ``"TLSv1.1"`` and ``"TLSv1.2"``.
    Recent OpenSSL versions may define more return values.
@@ -1477,7 +1494,7 @@ to speed up repeated connections from the same clients.
    string must be the path to a single file in PEM format containing the
    certificate as well as any number of CA certificates needed to establish
    the certificate's authenticity.  The *keyfile* string, if present, must
-   point to a file containing the private key in.  Otherwise the private
+   point to a file containing the private key.  Otherwise the private
    key will be taken from *certfile* as well.  See the discussion of
    :ref:`ssl-certificates` for more information on how the certificate
    is stored in the *certfile*.
@@ -1505,7 +1522,7 @@ to speed up repeated connections from the same clients.
 
    Load a set of default "certification authority" (CA) certificates from
    default locations. On Windows it loads CA certs from the ``CA`` and
-   ``ROOT`` system stores. On other systems it calls
+   ``ROOT`` system stores. On all systems it calls
    :meth:`SSLContext.set_default_verify_paths`. In the future the method may
    load CA certificates from other locations, too.
 
@@ -1702,10 +1719,10 @@ to speed up repeated connections from the same clients.
    Due to the early negotiation phase of the TLS connection, only limited
    methods and attributes are usable like
    :meth:`SSLSocket.selected_alpn_protocol` and :attr:`SSLSocket.context`.
-   :meth:`SSLSocket.getpeercert`, :meth:`SSLSocket.getpeercert`,
-   :meth:`SSLSocket.cipher` and :meth:`SSLSocket.compress` methods require that
+   The :meth:`SSLSocket.getpeercert`,
+   :meth:`SSLSocket.cipher` and :meth:`SSLSocket.compression` methods require that
    the TLS connection has progressed beyond the TLS Client Hello and therefore
-   will not contain return meaningful values nor can they be called safely.
+   will not return meaningful values nor can they be called safely.
 
    The *sni_callback* function must return ``None`` to allow the
    TLS negotiation to continue.  If a TLS failure is required, a constant
@@ -1869,7 +1886,7 @@ to speed up repeated connections from the same clients.
 
 .. attribute:: SSLContext.check_hostname
 
-   Whether to match the peer cert's hostname with :func:`match_hostname` in
+   Whether to match the peer cert's hostname in
    :meth:`SSLSocket.do_handshake`. The context's
    :attr:`~SSLContext.verify_mode` must be set to :data:`CERT_OPTIONAL` or
    :data:`CERT_REQUIRED`, and you must pass *server_hostname* to
@@ -1906,6 +1923,20 @@ to speed up repeated connections from the same clients.
 
      This features requires OpenSSL 0.9.8f or newer.
 
+.. attribute:: SSLContext.keylog_filename
+
+   Write TLS keys to a keylog file, whenever key material is generated or
+   received. The keylog file is designed for debugging purposes only. The
+   file format is specified by NSS and used by many traffic analyzers such
+   as Wireshark. The log file is opened in append-only mode. Writes are
+   synchronized between threads, but not between processes.
+
+   .. versionadded:: 3.8
+
+   .. note::
+
+     This features requires OpenSSL 1.1.1 or newer.
+
 .. attribute:: SSLContext.maximum_version
 
    A :class:`TLSVersion` enum member representing the highest supported
@@ -1940,6 +1971,19 @@ to speed up repeated connections from the same clients.
      with OpenSSL 1.1.0g or newer.
 
    .. versionadded:: 3.7
+
+.. attribute:: SSLContext.num_tickets
+
+   Control the number of TLS 1.3 session tickets of a
+   :attr:`TLS_PROTOCOL_SERVER` context. The setting has no impact on TLS
+   1.0 to 1.2 connections.
+
+   .. note::
+
+     This attribute is not available unless the ssl module is compiled
+     with OpenSSL 1.1.1 or newer.
+
+   .. versionadded:: 3.8
 
 .. attribute:: SSLContext.options
 
@@ -1978,7 +2022,7 @@ to speed up repeated connections from the same clients.
       Only available with OpenSSL 1.1.1 and TLS 1.3 enabled. Without TLS 1.3
       support, the property value is None and can't be modified
 
-   .. versionadded:: 3.7.1
+   .. versionadded:: 3.8
 
 .. attribute:: SSLContext.protocol
 
@@ -1995,6 +2039,11 @@ to speed up repeated connections from the same clients.
       Only writeable with OpenSSL 1.1.0 or higher.
 
    .. versionadded:: 3.7
+
+   .. versionchanged:: 3.9.3
+
+      The flag had no effect with OpenSSL before version 1.1.1k. Python 3.8.9,
+      3.9.3, and 3.10 include workarounds for previous versions.
 
 .. attribute:: SSLContext.verify_flags
 
@@ -2296,7 +2345,7 @@ waiting for clients to connect::
    context.load_cert_chain(certfile="mycertfile", keyfile="mykeyfile")
 
    bindsocket = socket.socket()
-   bindsocket.bind(('myaddr.mydomain.com', 10023))
+   bindsocket.bind(('myaddr.example.com', 10023))
    bindsocket.listen(5)
 
 When a client connects, you'll call :meth:`accept` on the socket to get the
@@ -2450,14 +2499,17 @@ provided.
    - :meth:`~SSLSocket.read`
    - :meth:`~SSLSocket.write`
    - :meth:`~SSLSocket.getpeercert`
+   - :meth:`~SSLSocket.selected_alpn_protocol`
    - :meth:`~SSLSocket.selected_npn_protocol`
    - :meth:`~SSLSocket.cipher`
    - :meth:`~SSLSocket.shared_ciphers`
    - :meth:`~SSLSocket.compression`
    - :meth:`~SSLSocket.pending`
    - :meth:`~SSLSocket.do_handshake`
+   - :meth:`~SSLSocket.verify_client_post_handshake`
    - :meth:`~SSLSocket.unwrap`
    - :meth:`~SSLSocket.get_channel_binding`
+   - :meth:`~SSLSocket.version`
 
    When compared to :class:`SSLSocket`, this object lacks the following
    features:

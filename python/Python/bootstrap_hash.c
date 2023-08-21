@@ -1,4 +1,5 @@
 #include "Python.h"
+#include "pycore_initconfig.h"
 #ifdef MS_WINDOWS
 #  include <windows.h>
 /* All sample MSDN wincrypt programs include the header below. It is at least
@@ -23,6 +24,16 @@
 #ifdef _Py_MEMORY_SANITIZER
 #  include <sanitizer/msan_interface.h>
 #endif
+
+#if defined(__APPLE__) && defined(__has_builtin)
+#  if __has_builtin(__builtin_available)
+#    define HAVE_GETENTRYPY_GETRANDOM_RUNTIME __builtin_available(macOS 10.12, iOS 10.10, tvOS 10.0, watchOS 3.0, *)
+#  endif
+#endif
+#ifndef HAVE_GETENTRYPY_GETRANDOM_RUNTIME
+#  define HAVE_GETENTRYPY_GETRANDOM_RUNTIME 1
+#endif
+
 
 #ifdef Py_DEBUG
 int _Py_HashSecret_Initialized = 0;
@@ -55,8 +66,6 @@ error:
 static int
 win32_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
 {
-    Py_ssize_t chunk;
-
     if (hCryptProv == 0)
     {
         if (win32_urandom_init(raise) == -1) {
@@ -66,8 +75,8 @@ win32_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
 
     while (size > 0)
     {
-        chunk = size > INT_MAX ? INT_MAX : size;
-        if (!CryptGenRandom(hCryptProv, (DWORD)chunk, buffer))
+        DWORD chunk = (DWORD)Py_MIN(size, PY_DWORD_MAX);
+        if (!CryptGenRandom(hCryptProv, chunk, buffer))
         {
             /* CryptGenRandom() failed */
             if (raise) {
@@ -164,7 +173,7 @@ py_getrandom(void *buffer, Py_ssize_t size, int blocking, int raise)
             }
 
             /* getrandom(GRND_NONBLOCK) fails with EAGAIN if the system urandom
-               is not initialiazed yet. For _PyRandom_Init(), we ignore the
+               is not initialized yet. For _PyRandom_Init(), we ignore the
                error and fall back on reading /dev/urandom which never blocks,
                even if the system urandom is not initialized yet:
                see the PEP 524. */
@@ -209,6 +218,16 @@ py_getrandom(void *buffer, Py_ssize_t size, int blocking, int raise)
      error.
 
    getentropy() is retried if it failed with EINTR: interrupted by a signal. */
+
+#if defined(__APPLE__) && defined(__has_attribute) && __has_attribute(availability)
+static int
+py_getentropy(char *buffer, Py_ssize_t size, int raise)
+        __attribute__((availability(macos,introduced=10.12)))
+        __attribute__((availability(ios,introduced=10.0)))
+        __attribute__((availability(tvos,introduced=10.0)))
+        __attribute__((availability(watchos,introduced=3.0)));
+#endif
+
 static int
 py_getentropy(char *buffer, Py_ssize_t size, int raise)
 {
@@ -499,19 +518,21 @@ pyurandom(void *buffer, Py_ssize_t size, int blocking, int raise)
 #else
 
 #if defined(PY_GETRANDOM) || defined(PY_GETENTROPY)
+    if (HAVE_GETENTRYPY_GETRANDOM_RUNTIME) {
 #ifdef PY_GETRANDOM
-    res = py_getrandom(buffer, size, blocking, raise);
+        res = py_getrandom(buffer, size, blocking, raise);
 #else
-    res = py_getentropy(buffer, size, raise);
+        res = py_getentropy(buffer, size, raise);
 #endif
-    if (res < 0) {
-        return -1;
-    }
-    if (res == 1) {
-        return 0;
-    }
-    /* getrandom() or getentropy() function is not available: failed with
-       ENOSYS or EPERM. Fall back on reading from /dev/urandom. */
+        if (res < 0) {
+            return -1;
+        }
+        if (res == 1) {
+            return 0;
+        }
+        /* getrandom() or getentropy() function is not available: failed with
+           ENOSYS or EPERM. Fall back on reading from /dev/urandom. */
+        } /* end of availability block */
 #endif
 
     return dev_urandom(buffer, size, raise);
@@ -547,44 +568,15 @@ _PyOS_URandomNonblock(void *buffer, Py_ssize_t size)
     return pyurandom(buffer, size, 0, 1);
 }
 
-int
-_Py_ReadHashSeed(const char *seed_text,
-                 int *use_hash_seed,
-                 unsigned long *hash_seed)
-{
-    Py_BUILD_ASSERT(sizeof(_Py_HashSecret_t) == sizeof(_Py_HashSecret.uc));
-    /* Convert a text seed to a numeric one */
-    if (seed_text && *seed_text != '\0' && strcmp(seed_text, "random") != 0) {
-        const char *endptr = seed_text;
-        unsigned long seed;
-        seed = strtoul(seed_text, (char **)&endptr, 10);
-        if (*endptr != '\0'
-            || seed > 4294967295UL
-            || (errno == ERANGE && seed == ULONG_MAX))
-        {
-            return -1;
-        }
-        /* Use a specific hash */
-        *use_hash_seed = 1;
-        *hash_seed = seed;
-    }
-    else {
-        /* Use a random hash */
-        *use_hash_seed = 0;
-        *hash_seed = 0;
-    }
-    return 0;
-}
 
-
-_PyInitError
-_Py_HashRandomization_Init(const _PyCoreConfig *config)
+PyStatus
+_Py_HashRandomization_Init(const PyConfig *config)
 {
     void *secret = &_Py_HashSecret;
     Py_ssize_t secret_size = sizeof(_Py_HashSecret_t);
 
     if (_Py_HashSecret_Initialized) {
-        return _Py_INIT_OK();
+        return _PyStatus_OK();
     }
     _Py_HashSecret_Initialized = 1;
 
@@ -609,11 +601,11 @@ _Py_HashRandomization_Init(const _PyCoreConfig *config)
            pyurandom() is non-blocking mode (blocking=0): see the PEP 524. */
         res = pyurandom(secret, secret_size, 0, 0);
         if (res < 0) {
-            return _Py_INIT_USER_ERR("failed to get random numbers "
-                                     "to initialize Python");
+            return _PyStatus_ERR("failed to get random numbers "
+                                 "to initialize Python");
         }
     }
-    return _Py_INIT_OK();
+    return _PyStatus_OK();
 }
 
 

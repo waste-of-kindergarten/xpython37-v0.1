@@ -13,10 +13,14 @@ Glossary
       examples which can be executed interactively in the interpreter.
 
    ``...``
-      The default Python prompt of the interactive shell when entering the
-      code for an indented code block, when within a pair of matching left and
-      right delimiters (parentheses, square brackets, curly braces or triple
-      quotes), or after specifying a decorator.
+      Can refer to:
+
+      * The default Python prompt of the interactive shell when entering the
+        code for an indented code block, when within a pair of matching left and
+        right delimiters (parentheses, square brackets, curly braces or triple
+        quotes), or after specifying a decorator.
+
+      * The :const:`Ellipsis` built-in constant.
 
    2to3
       A tool that tries to convert Python 2.x code to Python 3.x code by
@@ -185,6 +189,10 @@ Glossary
       A list of bytecode instructions can be found in the documentation for
       :ref:`the dis module <bytecodes>`.
 
+   callback
+      A subroutine function which is passed as an argument to be executed at
+      some point in the future.
+
    class
       A template for creating user-defined objects. Class definitions
       normally contain method definitions which operate on instances of the
@@ -270,12 +278,12 @@ Glossary
       The decorator syntax is merely syntactic sugar, the following two
       function definitions are semantically equivalent::
 
-         def f(...):
+         def f(arg):
              ...
          f = staticmethod(f)
 
          @staticmethod
-         def f(...):
+         def f(arg):
              ...
 
       The same concept exists for classes, but is less commonly used there.  See
@@ -293,12 +301,19 @@ Glossary
       including functions, methods, properties, class methods, static methods,
       and reference to super classes.
 
-      For more information about descriptors' methods, see :ref:`descriptors`.
+      For more information about descriptors' methods, see :ref:`descriptors`
+      or the :ref:`Descriptor How To Guide <descriptorhowto>`.
 
    dictionary
       An associative array, where arbitrary keys are mapped to values.  The
       keys can be any object with :meth:`__hash__` and :meth:`__eq__` methods.
       Called a hash in Perl.
+
+   dictionary comprehension
+      A compact way to process all or part of the elements in an iterable and
+      return a dictionary with the results. ``results = {n: n ** 2 for n in
+      range(10)}`` generates a dictionary containing key ``n`` mapped to
+      value ``n ** 2``. See :ref:`comprehensions`.
 
    dictionary view
       The objects returned from :meth:`dict.keys`, :meth:`dict.values`, and
@@ -411,12 +426,13 @@ Glossary
       which describe this functionality.
 
    __future__
-      A pseudo-module which programmers can use to enable new language features
-      which are not compatible with the current interpreter.
-
-      By importing the :mod:`__future__` module and evaluating its variables,
-      you can see when a new feature was first added to the language and when it
-      becomes the default::
+      A :ref:`future statement <future>`, ``from __future__ import <feature>``,
+      directs the compiler to compile the current module using syntax or
+      semantics that will become standard in a future release of Python.
+      The :mod:`__future__` module documents the possible values of
+      *feature*.  By importing this module and evaluating its variables,
+      you can see when a new feature was first added to the language and
+      when it will (or did) become the default::
 
          >>> import __future__
          >>> __future__.division
@@ -468,6 +484,14 @@ Glossary
       See also the :term:`single dispatch` glossary entry, the
       :func:`functools.singledispatch` decorator, and :pep:`443`.
 
+   generic type
+      A :term:`type` that can be parameterized; typically a
+      :ref:`container class<sequence-types>` such as :class:`list` or
+      :class:`dict`. Used for :term:`type hints <type hint>` and
+      :term:`annotations <annotation>`.
+
+      For more details, see :ref:`generic alias types<types-genericalias>`,
+      :pep:`483`, :pep:`484`, :pep:`585`, and the :mod:`typing` module.
 
    GIL
       See :term:`global interpreter lock`.
@@ -579,7 +603,7 @@ Glossary
       and :class:`tuple`) and some non-sequence types like :class:`dict`,
       :term:`file objects <file object>`, and objects of any classes you define
       with an :meth:`__iter__` method or with a :meth:`__getitem__` method
-      that implements :term:`Sequence` semantics.
+      that implements :term:`Sequence <sequence>` semantics.
 
       Iterables can be
       used in a :keyword:`for` loop and in many other places where a sequence is
@@ -820,9 +844,11 @@ Glossary
       .. _positional-only_parameter:
 
       * :dfn:`positional-only`: specifies an argument that can be supplied only
-        by position.  Python has no syntax for defining positional-only
-        parameters.  However, some built-in functions have positional-only
-        parameters (e.g. :func:`abs`).
+        by position. Positional-only parameters can be defined by including a
+        ``/`` character in the parameter list of the function definition after
+        them, for example *posonly1* and *posonly2* in the following::
+
+           def func(posonly1, posonly2, /, positional_or_keyword): ...
 
       .. _keyword-only_parameter:
 
@@ -1014,7 +1040,13 @@ Glossary
       :meth:`index`, :meth:`__contains__`, and
       :meth:`__reversed__`. Types that implement this expanded
       interface can be registered explicitly using
-      :func:`~abc.register`.
+      :func:`~abc.ABCMeta.register`.
+
+   set comprehension
+      A compact way to process all or part of the elements in an iterable and
+      return a set with the results. ``results = {c for c in 'abracadabra' if
+      c not in 'abc'}`` generates the set of strings ``{'r', 'd'}``.  See
+      :ref:`comprehensions`.
 
    single dispatch
       A form of :term:`generic function` dispatch where the implementation is
@@ -1040,7 +1072,16 @@ Glossary
       as :keyword:`if`, :keyword:`while` or :keyword:`for`.
 
    text encoding
-      A codec which encodes Unicode strings to bytes.
+      A string in Python is a sequence of Unicode code points (in range
+      ``U+0000``--``U+10FFFF``). To store or transfer a string, it needs to be
+      serialized as a sequence of bytes.
+
+      Serializing a string into a sequence of bytes is known as "encoding", and
+      recreating the string from the sequence of bytes is known as "decoding".
+
+      There are a variety of different text serialization
+      :ref:`codecs <standard-encodings>`, which are collectively referred to as
+      "text encodings".
 
    text file
       A :term:`file object` able to read and write :class:`str` objects.
@@ -1074,19 +1115,15 @@ Glossary
       Type aliases are useful for simplifying :term:`type hints <type hint>`.
       For example::
 
-         from typing import List, Tuple
-
          def remove_gray_shades(
-                 colors: List[Tuple[int, int, int]]) -> List[Tuple[int, int, int]]:
+                 colors: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
              pass
 
       could be made more readable like this::
 
-         from typing import List, Tuple
+         Color = tuple[int, int, int]
 
-         Color = Tuple[int, int, int]
-
-         def remove_gray_shades(colors: List[Color]) -> List[Color]:
+         def remove_gray_shades(colors: list[Color]) -> list[Color]:
              pass
 
       See :mod:`typing` and :pep:`484`, which describe this functionality.

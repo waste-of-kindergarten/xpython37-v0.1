@@ -45,14 +45,14 @@ extern char **completion_matches(char *, CPFunction *);
 #endif
 #endif
 
-#ifdef __APPLE__
 /*
  * It is possible to link the readline module to the readline
  * emulation library of editline/libedit.
  *
- * On OSX this emulation library is not 100% API compatible
- * with the "real" readline and cannot be detected at compile-time,
- * hence we use a runtime check to detect if we're using libedit
+ * This emulation library is not 100% API compatible with the "real" readline
+ * and cannot be detected at compile-time,
+ * hence we use a runtime check to detect if the Python readlinke module is
+ * linked to libedit.
  *
  * Currently there is one known API incompatibility:
  * - 'get_history' has a 1-based index with GNU readline, and a 0-based
@@ -64,7 +64,6 @@ static int using_libedit_emulation = 0;
 static const char libedit_version_tag[] = "EditLine wrapper";
 
 static int libedit_history_start = 0;
-#endif /* __APPLE__ */
 
 #ifdef HAVE_RL_COMPLETION_DISPLAY_MATCHES_HOOK
 static void
@@ -87,13 +86,18 @@ typedef struct {
   PyObject *endidx;
 } readlinestate;
 
-
-#define readline_state(o) ((readlinestate *)PyModule_GetState(o))
+static inline readlinestate*
+get_readline_state(PyObject *module)
+{
+    void *state = PyModule_GetState(module);
+    assert(state != NULL);
+    return (readlinestate *)state;
+}
 
 static int
 readline_clear(PyObject *m)
 {
-   readlinestate *state = readline_state(m);
+   readlinestate *state = get_readline_state(m);
    Py_CLEAR(state->completion_display_matches_hook);
    Py_CLEAR(state->startup_hook);
    Py_CLEAR(state->pre_input_hook);
@@ -106,7 +110,7 @@ readline_clear(PyObject *m)
 static int
 readline_traverse(PyObject *m, visitproc visit, void *arg)
 {
-    readlinestate *state = readline_state(m);
+    readlinestate *state = get_readline_state(m);
     Py_VISIT(state->completion_display_matches_hook);
     Py_VISIT(state->startup_hook);
     Py_VISIT(state->pre_input_hook);
@@ -141,6 +145,26 @@ decode(const char *s)
     return PyUnicode_DecodeLocale(s, "surrogateescape");
 }
 
+
+/*
+Explicitly disable bracketed paste in the interactive interpreter, even if it's
+set in the inputrc, is enabled by default (eg GNU Readline 8.1), or a user calls
+readline.read_init_file(). The Python REPL has not implemented bracketed
+paste support. Also, bracketed mode writes the "\x1b[?2004h" escape sequence
+into stdout which causes test failures in applications that don't support it.
+It can still be explicitly enabled by calling readline.parse_and_bind("set
+enable-bracketed-paste on"). See bpo-42819 for more details.
+
+This should be removed if bracketed paste mode is implemented (bpo-39820).
+*/
+
+static void
+disable_bracketed_paste(void)
+{
+    if (!using_libedit_emulation) {
+        rl_variable_bind ("enable-bracketed-paste", "off");
+    }
+}
 
 /* Exported function to send one line to readline's init file parser */
 
@@ -188,6 +212,7 @@ read_init_file(PyObject *self, PyObject *args)
         errno = rl_read_init_file(NULL);
     if (errno)
         return PyErr_SetFromErrno(PyExc_OSError);
+    disable_bracketed_paste();
     Py_RETURN_NONE;
 }
 
@@ -230,7 +255,7 @@ static PyObject *
 write_history_file(PyObject *self, PyObject *args)
 {
     PyObject *filename_obj = Py_None, *filename_bytes;
-    char *filename;
+    const char *filename;
     int err;
     if (!PyArg_ParseTuple(args, "|O:write_history_file", &filename_obj))
         return NULL;
@@ -266,7 +291,7 @@ append_history_file(PyObject *self, PyObject *args)
 {
     int nelements;
     PyObject *filename_obj = Py_None, *filename_bytes;
-    char *filename;
+    const char *filename;
     int err;
     if (!PyArg_ParseTuple(args, "i|O:append_history_file", &nelements, &filename_obj))
         return NULL;
@@ -693,7 +718,6 @@ get_history_item(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "i:get_history_item", &idx))
         return NULL;
-#ifdef  __APPLE__
     if (using_libedit_emulation) {
         /* Older versions of libedit's readline emulation
          * use 0-based indexes, while readline and newer
@@ -713,7 +737,6 @@ get_history_item(PyObject *self, PyObject *args)
             Py_RETURN_NONE;
         }
     }
-#endif /* __APPLE__ */
     if ((hist_ent = history_get(idx)))
         return decode(hist_ent->line);
     else {
@@ -867,7 +890,7 @@ on_hook(PyObject *func)
     int result = 0;
     if (func != NULL) {
         PyObject *r;
-        r = _PyObject_CallNoArg(func);
+        r = PyObject_CallNoArgs(func);
         if (r == NULL)
             goto error;
         if (r == Py_None)
@@ -1066,21 +1089,21 @@ done:
 }
 
 
-/* Helper to initialize GNU readline properly. */
-
-static void
+/* Helper to initialize GNU readline properly.
+   Return -1 on memory allocation failure, return 0 on success. */
+static int
 setup_readline(readlinestate *mod_state)
 {
 #ifdef SAVE_LOCALE
     char *saved_locale = strdup(setlocale(LC_CTYPE, NULL));
-    if (!saved_locale)
-        Py_FatalError("not enough memory to save locale");
+    if (!saved_locale) {
+        return -1;
+    }
 #endif
 
     /* The name must be defined before initialization */
     rl_readline_name = "python";
 
-#ifdef __APPLE__
     /* the libedit readline emulation resets key bindings etc
      * when calling rl_initialize.  So call it upfront
      */
@@ -1097,7 +1120,6 @@ setup_readline(readlinestate *mod_state)
         libedit_history_start = 1;
     }
     clear_history();
-#endif /* __APPLE__ */
 
     using_history();
 
@@ -1126,9 +1148,7 @@ setup_readline(readlinestate *mod_state)
     mod_state->begidx = PyLong_FromLong(0L);
     mod_state->endidx = PyLong_FromLong(0L);
 
-#ifdef __APPLE__
     if (!using_libedit_emulation)
-#endif
     {
         if (!isatty(STDOUT_FILENO)) {
             /* Issue #19884: stdout is not a terminal. Disable meta modifier
@@ -1148,14 +1168,15 @@ setup_readline(readlinestate *mod_state)
      * XXX: A bug in the readline-2.2 library causes a memory leak
      * inside this function.  Nothing we can do about it.
      */
-#ifdef __APPLE__
     if (using_libedit_emulation)
         rl_read_init_file(NULL);
     else
-#endif /* __APPLE__ */
         rl_initialize();
 
+    disable_bracketed_paste();
+
     RESTORE_LOCALE(saved_locale)
+    return 0;
 }
 
 /* Wrapper around GNU readline that handles signals differently. */
@@ -1281,12 +1302,10 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, const char *prompt)
         int length = _py_get_history_length();
         if (length > 0) {
             HIST_ENTRY *hist_ent;
-#ifdef __APPLE__
             if (using_libedit_emulation) {
                 /* handle older 0-based or newer 1-based indexing */
                 hist_ent = history_get(length + libedit_history_start - 1);
             } else
-#endif /* __APPLE__ */
                 hist_ent = history_get(length);
             line = hist_ent ? hist_ent->line : "";
         } else
@@ -1314,10 +1333,8 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, const char *prompt)
 PyDoc_STRVAR(doc_module,
 "Importing this module enables command line editing using GNU readline.");
 
-#ifdef __APPLE__
 PyDoc_STRVAR(doc_module_le,
 "Importing this module enables command line editing using libedit readline.");
-#endif /* __APPLE__ */
 
 static struct PyModuleDef readlinemodule = {
     PyModuleDef_HEAD_INIT,
@@ -1338,7 +1355,6 @@ PyInit_readline(void)
     PyObject *m;
     readlinestate *mod_state;
 
-#ifdef __APPLE__
     if (strncmp(rl_library_version, libedit_version_tag, strlen(libedit_version_tag)) == 0) {
         using_libedit_emulation = 1;
     }
@@ -1346,7 +1362,6 @@ PyInit_readline(void)
     if (using_libedit_emulation)
         readlinemodule.m_doc = doc_module_le;
 
-#endif /* __APPLE__ */
 
     m = PyModule_Create(&readlinemodule);
 
@@ -1369,7 +1384,10 @@ PyInit_readline(void)
 
     mod_state = (readlinestate *) PyModule_GetState(m);
     PyOS_ReadlineFunctionPointer = call_readline;
-    setup_readline(mod_state);
+    if (setup_readline(mod_state) < 0) {
+        PyErr_NoMemory();
+        goto error;
+    }
 
     return m;
 

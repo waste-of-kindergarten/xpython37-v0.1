@@ -63,11 +63,16 @@ The :mod:`gc` module provides the following functions:
    Return the debugging flags currently set.
 
 
-.. function:: get_objects()
+.. function:: get_objects(generation=None)
 
    Returns a list of all objects tracked by the collector, excluding the list
-   returned.
+   returned. If *generation* is not None, return only the objects tracked by
+   the collector that are in that generation.
 
+   .. versionchanged:: 3.8
+      New *generation* parameter.
+
+   .. audit-event:: gc.get_objects generation gc.get_objects
 
 .. function:: get_stats()
 
@@ -132,10 +137,13 @@ The :mod:`gc` module provides the following functions:
    resulting referrers.  To get only currently live objects, call :func:`collect`
    before calling :func:`get_referrers`.
 
-   Care must be taken when using objects returned by :func:`get_referrers` because
-   some of them could still be under construction and hence in a temporarily
-   invalid state. Avoid using :func:`get_referrers` for any purpose other than
-   debugging.
+   .. warning::
+      Care must be taken when using objects returned by :func:`get_referrers` because
+      some of them could still be under construction and hence in a temporarily
+      invalid state. Avoid using :func:`get_referrers` for any purpose other than
+      debugging.
+
+   .. audit-event:: gc.get_referrers objs gc.get_referrers
 
 
 .. function:: get_referents(*objs)
@@ -148,6 +156,7 @@ The :mod:`gc` module provides the following functions:
    be involved in a cycle.  So, for example, if an integer is directly reachable
    from an argument, that integer object may or may not appear in the result list.
 
+   .. audit-event:: gc.get_referents objs gc.get_referents
 
 .. function:: is_tracked(obj)
 
@@ -174,6 +183,27 @@ The :mod:`gc` module provides the following functions:
    .. versionadded:: 3.1
 
 
+.. function:: is_finalized(obj)
+
+   Returns ``True`` if the given object has been finalized by the
+   garbage collector, ``False`` otherwise. ::
+
+      >>> x = None
+      >>> class Lazarus:
+      ...     def __del__(self):
+      ...         global x
+      ...         x = self
+      ...
+      >>> lazarus = Lazarus()
+      >>> gc.is_finalized(lazarus)
+      False
+      >>> del lazarus
+      >>> gc.is_finalized(x)
+      True
+
+   .. versionadded:: 3.9
+
+
 .. function:: freeze()
 
    Freeze all the objects tracked by gc - move them to a permanent generation
@@ -181,7 +211,7 @@ The :mod:`gc` module provides the following functions:
    fork() call to make the gc copy-on-write friendly or to speed up collection.
    Also collection before a POSIX fork() call may free pages for future
    allocation which can cause copy-on-write too so it's advised to disable gc
-   in master process and freeze before fork and enable gc in child process.
+   in parent process and freeze before fork and enable gc in child process.
 
    .. versionadded:: 3.7
 

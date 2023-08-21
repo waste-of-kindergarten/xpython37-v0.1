@@ -1,4 +1,4 @@
-.. highlightlang:: c
+.. highlight:: c
 
 
 .. _api-intro:
@@ -107,10 +107,23 @@ complete listing.
 
 .. c:macro:: Py_UNREACHABLE()
 
-   Use this when you have a code path that you do not expect to be reached.
+   Use this when you have a code path that cannot be reached by design.
    For example, in the ``default:`` clause in a ``switch`` statement for which
    all possible values are covered in ``case`` statements.  Use this in places
    where you might be tempted to put an ``assert(0)`` or ``abort()`` call.
+
+   In release mode, the macro helps the compiler to optimize the code, and
+   avoids a warning about unreachable code.  For example, the macro is
+   implemented with ``__builtin_unreachable()`` on GCC in release mode.
+
+   A use for ``Py_UNREACHABLE()`` is following a call a function that
+   never returns but that is not declared :c:macro:`_Py_NO_RETURN`.
+
+   If a code path is very unlikely code but can be reached under exceptional
+   case, this macro must not be used.  For example, under low memory condition
+   or if a system call returns a value out of the expected range.  In this
+   case, it's better to report the error to the caller.  If the error cannot
+   be reported to caller, :c:func:`Py_FatalError` can be used.
 
    .. versionadded:: 3.7
 
@@ -158,9 +171,21 @@ complete listing.
 .. c:macro:: Py_UNUSED(arg)
 
    Use this for unused arguments in a function definition to silence compiler
-   warnings, e.g. ``PyObject* func(PyObject *Py_UNUSED(ignored))``.
+   warnings. Example: ``int func(int a, int Py_UNUSED(b)) { return a; }``.
 
    .. versionadded:: 3.4
+
+.. c:macro:: Py_DEPRECATED(version)
+
+   Use this for deprecated declarations.  The macro must be placed before the
+   symbol name.
+
+   Example::
+
+      Py_DEPRECATED(3.8) PyAPI_FUNC(int) Py_OldFunction(void);
+
+   .. versionchanged:: 3.8
+      MSVC support was added.
 
 .. c:macro:: PyDoc_STRVAR(name, str)
 
@@ -204,13 +229,13 @@ Objects, Types and Reference Counts
 .. index:: object: type
 
 Most Python/C API functions have one or more arguments as well as a return value
-of type :c:type:`PyObject\*`.  This type is a pointer to an opaque data type
+of type :c:type:`PyObject*`.  This type is a pointer to an opaque data type
 representing an arbitrary Python object.  Since all Python object types are
 treated the same way by the Python language in most situations (e.g.,
 assignments, scope rules, and argument passing), it is only fitting that they
 should be represented by a single C type.  Almost all Python objects live on the
 heap: you never declare an automatic or static variable of type
-:c:type:`PyObject`, only pointer variables of type :c:type:`PyObject\*` can  be
+:c:type:`PyObject`, only pointer variables of type :c:type:`PyObject*` can  be
 declared.  The sole exception are the type objects; since these must never be
 deallocated, they are typically static :c:type:`PyTypeObject` objects.
 
@@ -273,7 +298,7 @@ duration of the call.
 However, a common pitfall is to extract an object from a list and hold on to it
 for a while without incrementing its reference count. Some other operation might
 conceivably remove the object from the list, decrementing its reference count
-and possible deallocating it. The real danger is that innocent-looking
+and possibly deallocating it. The real danger is that innocent-looking
 operations may invoke arbitrary Python code which could do this; there is a code
 path which allows control to flow back to the user from a :c:func:`Py_DECREF`, so
 almost any operation is potentially dangerous.
@@ -471,11 +496,18 @@ Types
 
 There are few other data types that play a significant role in  the Python/C
 API; most are simple C types such as :c:type:`int`,  :c:type:`long`,
-:c:type:`double` and :c:type:`char\*`.  A few structure types  are used to
+:c:type:`double` and :c:type:`char*`.  A few structure types  are used to
 describe static tables used to list the functions exported  by a module or the
 data attributes of a new object type, and another is used to describe the value
 of a complex number.  These will  be discussed together with the functions that
 use them.
+
+.. c:type:: Py_ssize_t
+
+   A signed integral type such that ``sizeof(Py_ssize_t) == sizeof(size_t)``.
+   C99 doesn't define such a thing directly (size_t is an unsigned integral type).
+   See :pep:`353` for details. ``PY_SSIZE_T_MAX`` is the largest positive value
+   of type :c:type:`Py_ssize_t`.
 
 
 .. _api-exceptions:

@@ -55,16 +55,8 @@ The :mod:`urllib.request` module defines the following functions:
    The *cadefault* parameter is ignored.
 
    This function always returns an object which can work as a
-   :term:`context manager` and has methods such as
-
-   * :meth:`~urllib.response.addinfourl.geturl` --- return the URL of the resource retrieved,
-     commonly used to determine if a redirect was followed
-
-   * :meth:`~urllib.response.addinfourl.info` --- return the meta-information of the page, such as headers,
-     in the form of an :func:`email.message_from_string` instance (see
-     `Quick Reference to HTTP Headers <http://jkorpela.fi/http.html>`_)
-
-   * :meth:`~urllib.response.addinfourl.getcode` -- return the HTTP status code of the response.
+   :term:`context manager` and has the properties *url*, *headers*, and *status*.
+   See :class:`urllib.response.addinfourl` for more detail on these properties.
 
    For HTTP and HTTPS URLs, this function returns a
    :class:`http.client.HTTPResponse` object slightly modified. In addition
@@ -95,6 +87,12 @@ The :mod:`urllib.request` module defines the following functions:
    parameter to ``urllib.urlopen``, can be obtained by using
    :class:`ProxyHandler` objects.
 
+   .. audit-event:: urllib.Request fullurl,data,headers,method urllib.request.urlopen
+
+      The default opener raises an :ref:`auditing event <auditing>`
+      ``urllib.Request`` with arguments ``fullurl``, ``data``, ``headers``,
+      ``method`` taken from the request object.
+
    .. versionchanged:: 3.2
       *cafile* and *capath* were added.
 
@@ -117,6 +115,7 @@ The :mod:`urllib.request` module defines the following functions:
        Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
        :func:`ssl.create_default_context` select the system's trusted CA
        certificates for you.
+
 
 .. function:: install_opener(opener)
 
@@ -165,8 +164,8 @@ The :mod:`urllib.request` module defines the following functions:
    This helper function returns a dictionary of scheme to proxy server URL
    mappings. It scans the environment for variables named ``<scheme>_proxy``,
    in a case insensitive approach, for all operating systems first, and when it
-   cannot find it, looks for proxy information from Mac OSX System
-   Configuration for Mac OS X and Windows Systems Registry for Windows.
+   cannot find it, looks for proxy information from System
+   Configuration for macOS and Windows Systems Registry for Windows.
    If both lowercase and uppercase environment variables exist (and disagree),
    lowercase is preferred.
 
@@ -192,8 +191,8 @@ The following classes are provided:
    *data* must be an object specifying additional data to send to the
    server, or ``None`` if no such data is needed.  Currently HTTP
    requests are the only ones that use *data*.  The supported object
-   types include bytes, file-like objects, and iterables.  If no
-   ``Content-Length`` nor ``Transfer-Encoding`` header field
+   types include bytes, file-like objects, and iterables of bytes-like objects.
+   If no ``Content-Length`` nor ``Transfer-Encoding`` header field
    has been provided, :class:`HTTPHandler` will set these headers according
    to the type of *data*.  ``Content-Length`` will be used to send
    bytes objects, while ``Transfer-Encoding: chunked`` as specified in
@@ -214,6 +213,7 @@ The following classes are provided:
    (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11"``, while
    :mod:`urllib`'s default user agent string is
    ``"Python-urllib/2.6"`` (on Python 2.6).
+   All header keys are sent in camel case.
 
    An appropriate ``Content-Type`` header should be included if the *data*
    argument is present.  If this header has not been provided and *data*
@@ -299,8 +299,8 @@ The following classes are provided:
    the list of proxies from the environment variables
    ``<protocol>_proxy``.  If no proxy environment variables are set, then
    in a Windows environment proxy settings are obtained from the registry's
-   Internet Settings section, and in a Mac OS X environment proxy information
-   is retrieved from the OS X System Configuration Framework.
+   Internet Settings section, and in a macOS environment proxy information
+   is retrieved from the System Configuration Framework.
 
    To disable autodetected proxy pass an empty dictionary.
 
@@ -542,7 +542,8 @@ request.
    name, and later calls will overwrite previous calls in case the *key* collides.
    Currently, this is no loss of HTTP functionality, since all headers which have
    meaning when used more than once have a (header-specific) way of gaining the
-   same functionality using only one header.
+   same functionality using only one header.  Note that headers added using
+   this method are also added to redirected requests.
 
 
 .. method:: Request.add_unredirected_header(key, header)
@@ -651,7 +652,7 @@ OpenerDirector Objects
    optional *timeout* parameter specifies a timeout in seconds for blocking
    operations like the connection attempt (if not specified, the global default
    timeout setting will be used). The timeout feature actually works only for
-   HTTP, HTTPS and FTP connections).
+   HTTP, HTTPS and FTP connections.
 
 
 .. method:: OpenerDirector.error(proto, *args)
@@ -733,7 +734,7 @@ The following attribute and methods should only be used by classes derived from
 
    This method, if implemented, will be called by the parent
    :class:`OpenerDirector`.  It should return a file-like object as described in
-   the return value of the :meth:`open` of :class:`OpenerDirector`, or ``None``.
+   the return value of the :meth:`~OpenerDirector.open` method of :class:`OpenerDirector`, or ``None``.
    It should raise :exc:`~urllib.error.URLError`, unless a truly exceptional
    thing happens (for example, :exc:`MemoryError` should not be mapped to
    :exc:`URLError`).
@@ -947,7 +948,7 @@ tracking URIs for which authentication credentials should always be sent.
    If *is_authenticated* is specified as ``True``, *realm* is ignored.
 
 
-.. method:: HTTPPasswordMgr.find_user_password(realm, authuri)
+.. method:: HTTPPasswordMgrWithPriorAuth.find_user_password(realm, authuri)
 
    Same as for :class:`HTTPPasswordMgrWithDefaultRealm` objects
 
@@ -1578,9 +1579,42 @@ some point in the future.
    :synopsis: Response classes used by urllib.
 
 The :mod:`urllib.response` module defines functions and classes which define a
-minimal file like interface, including ``read()`` and ``readline()``. The
-typical response object is an addinfourl instance, which defines an ``info()``
-method and that returns headers and a ``geturl()`` method that returns the url.
-Functions defined by this module are used internally by the
-:mod:`urllib.request` module.
+minimal file-like interface, including ``read()`` and ``readline()``.
+Functions defined by this module are used internally by the :mod:`urllib.request` module.
+The typical response object is a :class:`urllib.response.addinfourl` instance:
 
+.. class:: addinfourl
+
+   .. attribute:: url
+
+      URL of the resource retrieved, commonly used to determine if a redirect was followed.
+
+   .. attribute:: headers
+
+      Returns the headers of the response in the form of an :class:`~email.message.EmailMessage` instance.
+
+   .. attribute:: status
+
+      .. versionadded:: 3.9
+
+      Status code returned by server.
+
+   .. method:: geturl()
+
+      .. deprecated:: 3.9
+         Deprecated in favor of :attr:`~addinfourl.url`.
+
+   .. method:: info()
+
+      .. deprecated:: 3.9
+         Deprecated in favor of :attr:`~addinfourl.headers`.
+
+   .. attribute:: code
+
+      .. deprecated:: 3.9
+         Deprecated in favor of :attr:`~addinfourl.status`.
+
+   .. method:: getstatus()
+
+      .. deprecated:: 3.9
+         Deprecated in favor of :attr:`~addinfourl.status`.

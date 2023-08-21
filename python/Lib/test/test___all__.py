@@ -4,6 +4,13 @@ import os
 import sys
 
 
+if support.check_sanitizer(address=True, memory=True):
+    # bpo-46633: test___all__ is skipped because importing some modules
+    # directly can trigger known problems with ASAN (like tk or crypt).
+    raise unittest.SkipTest("workaround ASAN build issues on loading tests "
+                            "like tk or crypt")
+
+
 class NoAll(RuntimeError):
     pass
 
@@ -17,6 +24,7 @@ class AllTest(unittest.TestCase):
         names = {}
         with support.check_warnings(
             (".* (module|package)", DeprecationWarning),
+            (".* (module|package)", PendingDeprecationWarning),
             ("", ResourceWarning),
             quiet=True):
             try:
@@ -30,21 +38,27 @@ class AllTest(unittest.TestCase):
             raise NoAll(modname)
         names = {}
         with self.subTest(module=modname):
-            try:
-                exec("from %s import *" % modname, names)
-            except Exception as e:
-                # Include the module name in the exception string
-                self.fail("__all__ failure in {}: {}: {}".format(
-                          modname, e.__class__.__name__, e))
-            if "__builtins__" in names:
-                del names["__builtins__"]
-            if '__annotations__' in names:
-                del names['__annotations__']
-            keys = set(names)
-            all_list = sys.modules[modname].__all__
-            all_set = set(all_list)
-            self.assertCountEqual(all_set, all_list, "in module {}".format(modname))
-            self.assertEqual(keys, all_set, "in module {}".format(modname))
+            with support.check_warnings(
+                ("", DeprecationWarning),
+                ("", ResourceWarning),
+                quiet=True):
+                try:
+                    exec("from %s import *" % modname, names)
+                except Exception as e:
+                    # Include the module name in the exception string
+                    self.fail("__all__ failure in {}: {}: {}".format(
+                              modname, e.__class__.__name__, e))
+                if "__builtins__" in names:
+                    del names["__builtins__"]
+                if '__annotations__' in names:
+                    del names['__annotations__']
+                if "__warningregistry__" in names:
+                    del names["__warningregistry__"]
+                keys = set(names)
+                all_list = sys.modules[modname].__all__
+                all_set = set(all_list)
+                self.assertCountEqual(all_set, all_list, "in module {}".format(modname))
+                self.assertEqual(keys, all_set, "in module {}".format(modname))
 
     def walk_modules(self, basedir, modpath):
         for fn in sorted(os.listdir(basedir)):

@@ -1,4 +1,5 @@
 import _compression
+import array
 from io import BytesIO, UnsupportedOperation, DEFAULT_BUFFER_SIZE
 import os
 import pathlib
@@ -9,7 +10,7 @@ from test import support
 import unittest
 
 from test.support import (
-    _4G, TESTFN, import_module, bigmemtest, run_unittest, unlink
+    _4G, TESTFN, import_module, bigmemtest, unlink
 )
 
 lzma = import_module("lzma")
@@ -333,6 +334,7 @@ class CompressorDecompressorTestCase(unittest.TestCase):
 
     # Test with inputs larger than 4GiB.
 
+    @support.skip_if_pgo_task
     @bigmemtest(size=_4G + 100, memuse=2)
     def test_compressor_bigmem(self, size):
         lzc = LZMACompressor()
@@ -344,11 +346,12 @@ class CompressorDecompressorTestCase(unittest.TestCase):
         finally:
             ddata = None
 
+    @support.skip_if_pgo_task
     @bigmemtest(size=_4G + 100, memuse=3)
     def test_decompressor_bigmem(self, size):
         lzd = LZMADecompressor()
         blocksize = 10 * 1024 * 1024
-        block = random.getrandbits(blocksize * 8).to_bytes(blocksize, "little")
+        block = random.randbytes(blocksize)
         try:
             input = block * (size // blocksize + 1)
             cdata = lzma.compress(input)
@@ -1225,6 +1228,14 @@ class FileTestCase(unittest.TestCase):
         self.assertTrue(d2.eof)
         self.assertEqual(out1 + out2, entire)
 
+    def test_issue44439(self):
+        q = array.array('Q', [1, 2, 3, 4, 5])
+        LENGTH = len(q) * q.itemsize
+
+        with LZMAFile(BytesIO(), 'w') as f:
+            self.assertEqual(f.write(q), LENGTH)
+            self.assertEqual(f.tell(), LENGTH)
+
 
 class OpenTestCase(unittest.TestCase):
 
@@ -1925,14 +1936,5 @@ ISSUE_21872_DAT = (
 )
 
 
-def test_main():
-    run_unittest(
-        CompressorDecompressorTestCase,
-        CompressDecompressFunctionTestCase,
-        FileTestCase,
-        OpenTestCase,
-        MiscellaneousTestCase,
-    )
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

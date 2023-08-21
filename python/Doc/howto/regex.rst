@@ -89,7 +89,7 @@ is the same as ``[a-c]``, which uses a range to express the same set of
 characters.  If you wanted to match only lowercase letters, your RE would be
 ``[a-z]``.
 
-Metacharacters are not active inside classes.  For example, ``[akm$]`` will
+Metacharacters (except ``\``) are not active inside classes.  For example, ``[akm$]`` will
 match any of the characters ``'a'``, ``'k'``, ``'m'``, or ``'$'``; ``'$'`` is
 usually a metacharacter, but inside a character class it's stripped of its
 special nature.
@@ -941,6 +941,13 @@ given numbers, so you can retrieve information about a group in two ways::
    'Lots'
    >>> m.group(1)
    'Lots'
+
+Additionally, you can retrieve named groups as a dictionary with
+:meth:`~re.Match.groupdict`::
+
+   >>> m = re.match(r'(?P<first>\w+) (?P<last>\w+)', 'Jane Doe')
+   >>> m.groupdict()
+   {'first': 'Jane', 'last': 'Doe'}
 
 Named groups are handy because they let you use easily-remembered names, instead
 of having to remember numbers.  Here's an example RE from the :mod:`imaplib`

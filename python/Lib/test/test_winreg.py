@@ -5,7 +5,7 @@ import os, sys, errno
 import unittest
 from test import support
 import threading
-from platform import machine
+from platform import machine, win32_edition
 
 # Do this first so test will be skipped if module doesn't exist
 support.import_module('winreg', required_on=['win'])
@@ -45,7 +45,7 @@ test_data = [
     ("Raw Data",      b"binary\x00data",                       REG_BINARY),
     ("Big String",    "x"*(2**14-1),                           REG_SZ),
     ("Big Binary",    b"x"*(2**14),                            REG_BINARY),
-    # Two and three kanjis, meaning: "Japan" and "Japanese")
+    # Two and three kanjis, meaning: "Japan" and "Japanese".
     ("Japanese 日本", "日本語", REG_SZ),
 ]
 
@@ -230,7 +230,7 @@ class LocalWinregTests(BaseWinregTests):
         h.Close()
         self.assertEqual(h.handle, 0)
 
-    def test_inexistant_remote_registry(self):
+    def test_nonexistent_remote_registry(self):
         connect = lambda: ConnectRegistry("abcdefghijkl", HKEY_CURRENT_USER)
         self.assertRaises(OSError, connect)
 
@@ -400,6 +400,7 @@ class Win64WinregTests(BaseWinregTests):
         DeleteKeyEx(key=HKEY_CURRENT_USER, sub_key=test_key_name,
                     access=KEY_ALL_ACCESS, reserved=0)
 
+    @unittest.skipIf(win32_edition() in ('WindowsCoreHeadless', 'IoTEdgeOS'), "APIs not available on WindowsCoreHeadless")
     def test_reflection_functions(self):
         # Test that we can call the query, enable, and disable functions
         # on a key which isn't on the reflection list with no consequences.
@@ -488,12 +489,9 @@ class Win64WinregTests(BaseWinregTests):
         with self.assertRaises(FileNotFoundError) as ctx:
             QueryValue(HKEY_CLASSES_ROOT, 'some_value_that_does_not_exist')
 
-def test_main():
-    support.run_unittest(LocalWinregTests, RemoteWinregTests,
-                         Win64WinregTests)
 
 if __name__ == "__main__":
     if not REMOTE_NAME:
         print("Remote registry calls can be tested using",
               "'test_winreg.py --remote \\\\machine_name'")
-    test_main()
+    unittest.main()

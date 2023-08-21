@@ -94,7 +94,7 @@ The module provides the following classes:
       :func:`ssl._create_unverified_context` can be passed to the *context*
       parameter.
 
-   .. versionchanged:: 3.7.4
+   .. versionchanged:: 3.8
       This class now enables TLS 1.3
       :attr:`ssl.SSLContext.post_handshake_auth` for the default *context* or
       when *cert_file* is passed with a custom *context*.
@@ -120,6 +120,25 @@ The module provides the following classes:
       The *strict* parameter was removed. HTTP 0.9 style "Simple Responses" are
       no longer supported.
 
+This module provides the following function:
+
+.. function:: parse_headers(fp)
+
+   Parse the headers from a file pointer *fp* representing a HTTP
+   request/response. The file has to be a :class:`BufferedIOBase` reader
+   (i.e. not text) and must provide a valid :rfc:`2822` style header.
+
+   This function returns an instance of :class:`http.client.HTTPMessage`
+   that holds the header fields, but no payload
+   (the same as :attr:`HTTPResponse.msg`
+   and :attr:`http.server.BaseHTTPRequestHandler.headers`).
+   After returning, the file pointer *fp* is ready to read the HTTP body.
+
+   .. note::
+      :meth:`parse_headers` does not parse the start-line of a HTTP message;
+      it only parses the ``Name: value`` lines. The file has to be ready to
+      read these field lines, so the first line should already be consumed
+      before calling the function.
 
 The following exceptions are raised as appropriate:
 
@@ -465,6 +484,14 @@ statement.
 
    HTTP protocol version used by server.  10 for HTTP/1.0, 11 for HTTP/1.1.
 
+.. attribute:: HTTPResponse.url
+
+   URL of the resource retrieved, commonly used to determine if a redirect was followed.
+
+.. attribute:: HTTPResponse.headers
+
+   Headers of the response in the form of an :class:`email.message.EmailMessage` instance.
+
 .. attribute:: HTTPResponse.status
 
    Status code returned by server.
@@ -482,6 +509,21 @@ statement.
 
    Is ``True`` if the stream is closed.
 
+.. method:: HTTPResponse.geturl()
+
+   .. deprecated:: 3.9
+      Deprecated in favor of :attr:`~HTTPResponse.url`.
+
+.. method:: HTTPResponse.info()
+
+   .. deprecated:: 3.9
+      Deprecated in favor of :attr:`~HTTPResponse.headers`.
+
+.. method:: HTTPResponse.getstatus()
+
+   .. deprecated:: 3.9
+      Deprecated in favor of :attr:`~HTTPResponse.status`.
+
 Examples
 --------
 
@@ -497,10 +539,7 @@ Here is an example session that uses the ``GET`` method::
    >>> # The following example demonstrates reading data in chunks.
    >>> conn.request("GET", "/")
    >>> r1 = conn.getresponse()
-   >>> while True:
-   ...     chunk = r1.read(200)  # 200 bytes
-   ...     if not chunk:
-   ...          break
+   >>> while chunk := r1.read(200):
    ...     print(repr(chunk))
    b'<!doctype html>\n<!--[if"...
    ...

@@ -317,11 +317,10 @@ expect a function argument.
 
       >>> itemgetter(1)('ABCDEFG')
       'B'
-      >>> itemgetter(1,3,5)('ABCDEFG')
+      >>> itemgetter(1, 3, 5)('ABCDEFG')
       ('B', 'D', 'F')
-      >>> itemgetter(slice(2,None))('ABCDEFG')
+      >>> itemgetter(slice(2, None))('ABCDEFG')
       'CDEFG'
-
       >>> soldier = dict(rank='captain', name='dotterbart')
       >>> itemgetter('rank')(soldier)
       'captain'
@@ -337,7 +336,7 @@ expect a function argument.
       [('orange', 1), ('banana', 2), ('apple', 3), ('pear', 5)]
 
 
-.. function:: methodcaller(name[, args...])
+.. function:: methodcaller(name, /, *args, **kwargs)
 
    Return a callable object that calls the method *name* on its operand.  If
    additional arguments and/or keyword arguments are given, they will be given
@@ -350,7 +349,7 @@ expect a function argument.
 
    Equivalent to::
 
-      def methodcaller(name, *args, **kwargs):
+      def methodcaller(name, /, *args, **kwargs):
           def caller(obj):
               return getattr(obj, name)(*args, **kwargs)
           return caller

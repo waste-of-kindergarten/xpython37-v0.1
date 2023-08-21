@@ -1,4 +1,4 @@
-.. highlightlang:: c
+.. highlight:: c
 
 .. _object:
 
@@ -81,8 +81,9 @@ Object Protocol
    return ``0`` on success.  This is the equivalent of the Python statement
    ``o.attr_name = v``.
 
-   If *v* is ``NULL``, the attribute is deleted, however this feature is
-   deprecated in favour of using :c:func:`PyObject_DelAttr`.
+   If *v* is ``NULL``, the attribute is deleted. This behaviour is deprecated
+   in favour of using :c:func:`PyObject_DelAttr`, but there are currently no
+   plans to remove it.
 
 
 .. c:function:: int PyObject_SetAttrString(PyObject *o, const char *attr_name, PyObject *v)
@@ -92,7 +93,7 @@ Object Protocol
    return ``0`` on success.  This is the equivalent of the Python statement
    ``o.attr_name = v``.
 
-   If *v* is ``NULL``, the attribute is deleted, however this feature is
+   If *v* is ``NULL``, the attribute is deleted, but this feature is
    deprecated in favour of using :c:func:`PyObject_DelAttrString`.
 
 
@@ -196,6 +197,7 @@ Object Protocol
       This function now includes a debug assertion to help ensure that it
       does not silently discard an active exception.
 
+
 .. c:function:: PyObject* PyObject_Bytes(PyObject *o)
 
    .. index:: builtin: bytes
@@ -247,101 +249,6 @@ Object Protocol
    of base classes).
 
 
-.. c:function:: int PyCallable_Check(PyObject *o)
-
-   Determine if the object *o* is callable.  Return ``1`` if the object is callable
-   and ``0`` otherwise.  This function always succeeds.
-
-
-.. c:function:: PyObject* PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs)
-
-   Call a callable Python object *callable*, with arguments given by the
-   tuple *args*, and named arguments given by the dictionary *kwargs*.
-
-   *args* must not be ``NULL``, use an empty tuple if no arguments are needed.
-   If no named arguments are needed, *kwargs* can be ``NULL``.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-   This is the equivalent of the Python expression:
-   ``callable(*args, **kwargs)``.
-
-
-.. c:function:: PyObject* PyObject_CallObject(PyObject *callable, PyObject *args)
-
-   Call a callable Python object *callable*, with arguments given by the
-   tuple *args*.  If no arguments are needed, then *args* can be ``NULL``.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-   This is the equivalent of the Python expression: ``callable(*args)``.
-
-
-.. c:function:: PyObject* PyObject_CallFunction(PyObject *callable, const char *format, ...)
-
-   Call a callable Python object *callable*, with a variable number of C arguments.
-   The C arguments are described using a :c:func:`Py_BuildValue` style format
-   string.  The format can be ``NULL``, indicating that no arguments are provided.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-   This is the equivalent of the Python expression: ``callable(*args)``.
-
-   Note that if you only pass :c:type:`PyObject \*` args,
-   :c:func:`PyObject_CallFunctionObjArgs` is a faster alternative.
-
-   .. versionchanged:: 3.4
-      The type of *format* was changed from ``char *``.
-
-
-.. c:function:: PyObject* PyObject_CallMethod(PyObject *obj, const char *name, const char *format, ...)
-
-   Call the method named *name* of object *obj* with a variable number of C
-   arguments.  The C arguments are described by a :c:func:`Py_BuildValue` format
-   string that should  produce a tuple.
-
-   The format can be ``NULL``, indicating that no arguments are provided.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-   This is the equivalent of the Python expression:
-   ``obj.name(arg1, arg2, ...)``.
-
-   Note that if you only pass :c:type:`PyObject \*` args,
-   :c:func:`PyObject_CallMethodObjArgs` is a faster alternative.
-
-   .. versionchanged:: 3.4
-      The types of *name* and *format* were changed from ``char *``.
-
-
-.. c:function:: PyObject* PyObject_CallFunctionObjArgs(PyObject *callable, ..., NULL)
-
-   Call a callable Python object *callable*, with a variable number of
-   :c:type:`PyObject\*` arguments.  The arguments are provided as a variable number
-   of parameters followed by ``NULL``.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-   This is the equivalent of the Python expression:
-   ``callable(arg1, arg2, ...)``.
-
-
-.. c:function:: PyObject* PyObject_CallMethodObjArgs(PyObject *obj, PyObject *name, ..., NULL)
-
-   Calls a method of the Python object *obj*, where the name of the method is given as a
-   Python string object in *name*.  It is called with a variable number of
-   :c:type:`PyObject\*` arguments.  The arguments are provided as a variable number
-   of parameters followed by ``NULL``.
-
-   Return the result of the call on success, or raise an exception and return
-   ``NULL`` on failure.
-
-
 .. c:function:: Py_hash_t PyObject_Hash(PyObject *o)
 
    .. index:: builtin: hash
@@ -351,7 +258,7 @@ Object Protocol
 
    .. versionchanged:: 3.2
       The return type is now Py_hash_t.  This is a signed integer the same size
-      as Py_ssize_t.
+      as :c:type:`Py_ssize_t`.
 
 
 .. c:function:: Py_hash_t PyObject_HashNotImplemented(PyObject *o)
@@ -384,8 +291,8 @@ Object Protocol
    of object *o*. On failure, raises :exc:`SystemError` and returns ``NULL``.  This
    is equivalent to the Python expression ``type(o)``. This function increments the
    reference count of the return value. There's really no reason to use this
-   function instead of the common expression ``o->ob_type``, which returns a
-   pointer of type :c:type:`PyTypeObject\*`, except when the incremented reference
+   function instead of the :c:func:`Py_TYPE()` function, which returns a
+   pointer of type :c:type:`PyTypeObject*`, except when the incremented reference
    count is needed.
 
 
@@ -405,12 +312,12 @@ Object Protocol
    returned.  This is the equivalent to the Python expression ``len(o)``.
 
 
-.. c:function:: Py_ssize_t PyObject_LengthHint(PyObject *o, Py_ssize_t default)
+.. c:function:: Py_ssize_t PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
 
    Return an estimated length for the object *o*. First try to return its
    actual length, then an estimate using :meth:`~object.__length_hint__`, and
    finally return the default value. On error return ``-1``. This is the
-   equivalent to the Python expression ``operator.length_hint(o, default)``.
+   equivalent to the Python expression ``operator.length_hint(o, defaultvalue)``.
 
    .. versionadded:: 3.4
 
@@ -425,7 +332,8 @@ Object Protocol
 
    Map the object *key* to the value *v*.  Raise an exception and
    return ``-1`` on failure; return ``0`` on success.  This is the
-   equivalent of the Python statement ``o[key] = v``.
+   equivalent of the Python statement ``o[key] = v``.  This function *does
+   not* steal a reference to *v*.
 
 
 .. c:function:: int PyObject_DelItem(PyObject *o, PyObject *key)

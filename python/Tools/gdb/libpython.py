@@ -468,7 +468,7 @@ class InstanceProxy(object):
     def __repr__(self):
         if isinstance(self.attrdict, dict):
             kwargs = ', '.join(["%s=%r" % (arg, val)
-                                for arg, val in self.attrdict.iteritems()])
+                                for arg, val in self.attrdict.items()])
             return '<%s(%s) at remote 0x%x>' % (self.cl_name,
                                                 kwargs, self.address)
         else:
@@ -659,7 +659,10 @@ class PyCodeObjectPtr(PyObjectPtr):
             addr += ord(addr_incr)
             if addr > addrq:
                 return lineno
-            lineno += ord(line_incr)
+            line_delta = ord(line_incr)
+            if line_delta >= 128:
+                line_delta -= 256
+            lineno += line_delta
         return lineno
 
 
@@ -1282,7 +1285,7 @@ class PyUnicodeObjectPtr(PyObjectPtr):
                 out.write('\\r')
 
             # Map non-printable US ASCII to '\xhh' */
-            elif ch < ' ' or ch == 0x7F:
+            elif ch < ' ' or ord(ch) == 0x7F:
                 out.write('\\x')
                 out.write(hexdigits[(ord(ch) >> 4) & 0x000F])
                 out.write(hexdigits[ord(ch) & 0x000F])
@@ -1394,7 +1397,7 @@ class wrapperobject(PyObjectPtr):
 
 
 def int_from_int(gdbval):
-    return int(str(gdbval))
+    return int(gdbval)
 
 
 def stringify(val):
@@ -1565,8 +1568,8 @@ class Frame(object):
         if not caller:
             return False
 
-        if caller in ('_PyCFunction_FastCallDict',
-                      '_PyCFunction_FastCallKeywords'):
+        if (caller.startswith('cfunction_vectorcall_') or
+            caller == 'cfunction_call'):
             arg_name = 'func'
             # Within that frame:
             #   "func" is the local containing the PyObject* of the

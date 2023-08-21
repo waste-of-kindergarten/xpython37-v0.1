@@ -69,6 +69,10 @@ This documentation page contains the following sections:
 Transports
 ==========
 
+**Source code:** :source:`Lib/asyncio/transports.py`
+
+----------------------------------------------------
+
 Transports are classes provided by :mod:`asyncio` in order to abstract
 various kinds of communication channels.
 
@@ -431,6 +435,10 @@ Subprocess Transports
 Protocols
 =========
 
+**Source code:** :source:`Lib/asyncio/protocols.py`
+
+---------------------------------------------------
+
 asyncio provides a set of abstract base classes that should be used
 to implement network protocols.  Those classes are meant to be used
 together with :ref:`transports <asyncio-transport>`.
@@ -580,9 +588,6 @@ Buffered Streaming Protocols
 ----------------------------
 
 .. versionadded:: 3.7
-   **Important:** this has been added to asyncio in Python 3.7
-   *on a provisional basis*!  This is as an experimental API that
-   might be changed or removed completely in Python 3.8.
 
 Buffered Protocols can be used with any event loop method
 that supports `Streaming Protocols`_.
@@ -678,7 +683,7 @@ factories passed to the :meth:`loop.create_datagram_endpoint` method.
 Subprocess Protocols
 --------------------
 
-Datagram Protocol instances should be constructed by protocol
+Subprocess Protocol instances should be constructed by protocol
 factories passed to the :meth:`loop.subprocess_exec` and
 :meth:`loop.subprocess_shell` methods.
 
@@ -988,7 +993,7 @@ loop.subprocess_exec() and SubprocessProtocol
 An example of a subprocess protocol used to get the output of a
 subprocess and to wait for the subprocess exit.
 
-The subprocess is created by th :meth:`loop.subprocess_exec` method::
+The subprocess is created by the :meth:`loop.subprocess_exec` method::
 
     import asyncio
     import sys
@@ -1030,10 +1035,6 @@ The subprocess is created by th :meth:`loop.subprocess_exec` method::
         # pipe_data_received() method of the protocol.
         data = bytes(protocol.output)
         return data.decode('ascii').rstrip()
-
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(
-            asyncio.WindowsProactorEventLoopPolicy())
 
     date = asyncio.run(get_date())
     print(f"Current date: {date}")

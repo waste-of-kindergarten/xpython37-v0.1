@@ -1,4 +1,4 @@
-.. highlightlang:: c
+.. highlight:: c
 
 
 .. _concrete:
@@ -115,3 +115,4 @@ Other Objects
    coro.rst
    contextvars.rst
    datetime.rst
+   typehints.rst
