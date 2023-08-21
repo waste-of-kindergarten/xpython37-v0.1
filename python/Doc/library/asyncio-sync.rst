@@ -6,10 +6,6 @@
 Synchronization Primitives
 ==========================
 
-**Source code:** :source:`Lib/asyncio/locks.py`
-
------------------------------------------------
-
 asyncio synchronization primitives are designed to be similar to
 those of the :mod:`threading` module with two important caveats:
 
@@ -63,9 +59,6 @@ Lock
        finally:
            lock.release()
 
-   .. deprecated-removed:: 3.8 3.10
-      The *loop* parameter.
-
    .. coroutinemethod:: acquire()
 
       Acquire the lock.
@@ -104,13 +97,9 @@ Event
    that some event has happened.
 
    An Event object manages an internal flag that can be set to *true*
-   with the :meth:`~Event.set` method and reset to *false* with the
-   :meth:`clear` method.  The :meth:`~Event.wait` method blocks until the
+   with the :meth:`set` method and reset to *false* with the
+   :meth:`clear` method.  The :meth:`wait` method blocks until the
    flag is set to *true*.  The flag is set to *false* initially.
-
-
-   .. deprecated-removed:: 3.8 3.10
-      The *loop* parameter.
 
    .. _asyncio_example_sync_event:
 
@@ -142,7 +131,7 @@ Event
       Wait until the event is set.
 
       If the event is set, return ``True`` immediately.
-      Otherwise block until another task calls :meth:`~Event.set`.
+      Otherwise block until another task calls :meth:`set`.
 
    .. method:: set()
 
@@ -155,8 +144,8 @@ Event
 
       Clear (unset) the event.
 
-      Tasks awaiting on :meth:`~Event.wait` will now block until the
-      :meth:`~Event.set` method is called again.
+      Tasks awaiting on :meth:`wait` will now block until the
+      :meth:`set` method is called again.
 
    .. method:: is_set()
 
@@ -183,10 +172,6 @@ Condition
    The optional *lock* argument must be a :class:`Lock` object or
    ``None``.  In the latter case a new Lock object is created
    automatically.
-
-
-   .. deprecated-removed:: 3.8 3.10
-      The *loop* parameter.
 
    The preferred way to use a Condition is an :keyword:`async with`
    statement::
@@ -284,10 +269,6 @@ Semaphore
    internal counter (``1`` by default). If the given value is
    less than ``0`` a :exc:`ValueError` is raised.
 
-
-   .. deprecated-removed:: 3.8 3.10
-      The *loop* parameter.
-
    The preferred way to use a Semaphore is an :keyword:`async with`
    statement::
 
@@ -341,14 +322,11 @@ BoundedSemaphore
    increases the internal counter above the initial *value*.
 
 
-   .. deprecated-removed:: 3.8 3.10
-      The *loop* parameter.
-
 ---------
 
 
-.. versionchanged:: 3.9
+.. deprecated:: 3.7
 
    Acquiring a lock using ``await lock`` or ``yield from lock`` and/or
    :keyword:`with` statement (``with await lock``, ``with (yield from
-   lock)``) was removed.  Use ``async with lock`` instead.
+   lock)``) is deprecated.  Use ``async with lock`` instead.

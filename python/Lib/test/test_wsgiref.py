@@ -1,6 +1,5 @@
 from unittest import mock
 from test import support
-from test.support import socket_helper
 from test.test_httpservers import NoLogRequestHandler
 from unittest import TestCase
 from wsgiref.util import setup_testing_defaults
@@ -264,7 +263,7 @@ class IntegrationTests(TestCase):
         class WsgiHandler(NoLogRequestHandler, WSGIRequestHandler):
             pass
 
-        server = make_server(socket_helper.HOST, 0, app, handler_class=WsgiHandler)
+        server = make_server(support.HOST, 0, app, handler_class=WsgiHandler)
         self.addCleanup(server.server_close)
         interrupted = threading.Event()
 
@@ -339,7 +338,6 @@ class UtilityTests(TestCase):
         util.setup_testing_defaults(kw)
         self.assertEqual(util.request_uri(kw,query),uri)
 
-    @support.ignore_warnings(category=DeprecationWarning)
     def checkFW(self,text,size,match):
 
         def make_it(text=text,size=size):
@@ -357,13 +355,6 @@ class UtilityTests(TestCase):
 
         it.close()
         self.assertTrue(it.filelike.closed)
-
-    def test_filewrapper_getitem_deprecation(self):
-        wrapper = util.FileWrapper(StringIO('foobar'), 3)
-        with self.assertWarnsRegex(DeprecationWarning,
-                                   r'Use iterator protocol instead'):
-            # This should have returned 'bar'.
-            self.assertEqual(wrapper[1], 'foo')
 
     def testSimpleShifts(self):
         self.checkShift('','/', '', '/', '')
@@ -579,7 +570,7 @@ class HandlerTests(TestCase):
         # Test handler.environ as a dict
         expected = {}
         setup_testing_defaults(expected)
-        # Handler inherits os_environ variables which are not overridden
+        # Handler inherits os_environ variables which are not overriden
         # by SimpleHandler.add_cgi_vars() (SimpleHandler.base_env)
         for key, value in os_environ.items():
             if key not in expected:
@@ -587,10 +578,10 @@ class HandlerTests(TestCase):
         expected.update({
             # X doesn't exist in os_environ
             "X": "Y",
-            # HOME is overridden by TestHandler
+            # HOME is overriden by TestHandler
             'HOME': "/override/home",
 
-            # overridden by setup_testing_defaults()
+            # overriden by setup_testing_defaults()
             "SCRIPT_NAME": "",
             "SERVER_NAME": "127.0.0.1",
 

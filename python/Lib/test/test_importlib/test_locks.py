@@ -139,10 +139,15 @@ class LifetimeTests:
  ) = test_util.test_both(LifetimeTests, init=init)
 
 
-def setUpModule():
-    thread_info = support.threading_setup()
-    unittest.addModuleCleanup(support.threading_cleanup, *thread_info)
+@support.reap_threads
+def test_main():
+    support.run_unittest(Frozen_ModuleLockAsRLockTests,
+                         Source_ModuleLockAsRLockTests,
+                         Frozen_DeadlockAvoidanceTests,
+                         Source_DeadlockAvoidanceTests,
+                         Frozen_LifetimeTests,
+                         Source_LifetimeTests)
 
 
 if __name__ == '__main__':
-    unittets.main()
+    test_main()

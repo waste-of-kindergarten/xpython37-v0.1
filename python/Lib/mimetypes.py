@@ -95,7 +95,7 @@ class MimeTypes:
             exts.append(ext)
 
     def guess_type(self, url, strict=True):
-        """Guess the type of a file which is either a URL or a path-like object.
+        """Guess the type of a file based on its URL.
 
         Return value is a tuple (type, encoding) where type is None if
         the type can't be guessed (no or unknown suffix) or a string
@@ -114,7 +114,7 @@ class MimeTypes:
         but non-standard types.
         """
         url = os.fspath(url)
-        scheme, url = urllib.parse._splittype(url)
+        scheme, url = urllib.parse.splittype(url)
         if scheme == 'data':
             # syntax of data URLs:
             # dataurl   := "data:" [ mediatype ] [ ";base64" ] "," data
@@ -135,23 +135,25 @@ class MimeTypes:
                 type = 'text/plain'
             return type, None           # never compressed, so encoding is None
         base, ext = posixpath.splitext(url)
-        while (ext_lower := ext.lower()) in self.suffix_map:
-            base, ext = posixpath.splitext(base + self.suffix_map[ext_lower])
-        # encodings_map is case sensitive
+        while ext in self.suffix_map:
+            base, ext = posixpath.splitext(base + self.suffix_map[ext])
         if ext in self.encodings_map:
             encoding = self.encodings_map[ext]
             base, ext = posixpath.splitext(base)
         else:
             encoding = None
-        ext = ext.lower()
         types_map = self.types_map[True]
         if ext in types_map:
             return types_map[ext], encoding
+        elif ext.lower() in types_map:
+            return types_map[ext.lower()], encoding
         elif strict:
             return None, encoding
         types_map = self.types_map[False]
         if ext in types_map:
             return types_map[ext], encoding
+        elif ext.lower() in types_map:
+            return types_map[ext.lower()], encoding
         else:
             return None, encoding
 
@@ -167,7 +169,7 @@ class MimeTypes:
         but non-standard types.
         """
         type = type.lower()
-        extensions = list(self.types_map_inv[True].get(type, []))
+        extensions = self.types_map_inv[True].get(type, [])
         if not strict:
             for ext in self.types_map_inv[False].get(type, []):
                 if ext not in extensions:
@@ -370,7 +372,7 @@ def init(files=None):
 
 def read_mime_types(file):
     try:
-        f = open(file, encoding='utf-8')
+        f = open(file)
     except OSError:
         return None
     with f:
@@ -399,7 +401,6 @@ def _default_mime_types():
         '.Z': 'compress',
         '.bz2': 'bzip2',
         '.xz': 'xz',
-        '.br': 'br',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
@@ -413,7 +414,6 @@ def _default_mime_types():
         '.js'     : 'application/javascript',
         '.mjs'    : 'application/javascript',
         '.json'   : 'application/json',
-        '.webmanifest': 'application/manifest+json',
         '.doc'    : 'application/msword',
         '.dot'    : 'application/msword',
         '.wiz'    : 'application/msword',
@@ -562,7 +562,7 @@ def _default_mime_types():
 _default_mime_types()
 
 
-def _main():
+if __name__ == '__main__':
     import getopt
 
     USAGE = """\
@@ -606,7 +606,3 @@ More than one type argument may be given.
             guess, encoding = guess_type(gtype, strict)
             if not guess: print("I don't know anything about type", gtype)
             else: print('type:', guess, 'encoding:', encoding)
-
-
-if __name__ == '__main__':
-    _main()

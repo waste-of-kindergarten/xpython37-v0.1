@@ -230,7 +230,7 @@ class ThreadSignals(unittest.TestCase):
             signal.signal(signal.SIGUSR1, old_handler)
 
 
-def setUpModule():
+def test_main():
     global signal_blackboard
 
     signal_blackboard = { signal.SIGUSR1 : {'tripped': 0, 'tripped_by': 0 },
@@ -238,8 +238,10 @@ def setUpModule():
                           signal.SIGALRM : {'tripped': 0, 'tripped_by': 0 } }
 
     oldsigs = registerSignals(handle_signals, handle_signals, handle_signals)
-    unittest.addModuleCleanup(registerSignals, *oldsigs)
-
+    try:
+        support.run_unittest(ThreadSignals)
+    finally:
+        registerSignals(*oldsigs)
 
 if __name__ == '__main__':
-    unittest.main()
+    test_main()

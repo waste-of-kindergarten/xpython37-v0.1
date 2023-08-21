@@ -11,7 +11,9 @@
 The :mod:`queue` module implements multi-producer, multi-consumer queues.
 It is especially useful in threaded programming when information must be
 exchanged safely between multiple threads.  The :class:`Queue` class in this
-module implements all the required locking semantics.
+module implements all the required locking semantics.  It depends on the
+availability of thread support in Python; see the :mod:`threading`
+module.
 
 The module implements three types of queue, which differ only in the order in
 which the entries are retrieved.  In a :abbr:`FIFO (first-in, first-out)`
@@ -138,7 +140,7 @@ provide the public methods described below.
 
 .. method:: Queue.put_nowait(item)
 
-   Equivalent to ``put(item, block=False)``.
+   Equivalent to ``put(item, False)``.
 
 
 .. method:: Queue.get(block=True, timeout=None)
@@ -190,28 +192,32 @@ fully processed by daemon consumer threads.
 
 Example of how to wait for enqueued tasks to be completed::
 
-    import threading, queue
-
-    q = queue.Queue()
-
     def worker():
         while True:
             item = q.get()
-            print(f'Working on {item}')
-            print(f'Finished {item}')
+            if item is None:
+                break
+            do_work(item)
             q.task_done()
 
-    # turn-on the worker thread
-    threading.Thread(target=worker, daemon=True).start()
+    q = queue.Queue()
+    threads = []
+    for i in range(num_worker_threads):
+        t = threading.Thread(target=worker)
+        t.start()
+        threads.append(t)
 
-    # send thirty task requests to the worker
-    for item in range(30):
+    for item in source():
         q.put(item)
-    print('All task requests sent\n', end='')
 
     # block until all tasks are done
     q.join()
-    print('All work completed')
+
+    # stop workers
+    for i in range(num_worker_threads):
+        q.put(None)
+    for t in threads:
+        t.join()
 
 
 SimpleQueue Objects
@@ -249,7 +255,7 @@ SimpleQueue Objects
 
 .. method:: SimpleQueue.put_nowait(item)
 
-   Equivalent to ``put(item, block=False)``, provided for compatibility with
+   Equivalent to ``put(item)``, provided for compatibility with
    :meth:`Queue.put_nowait`.
 
 
@@ -276,5 +282,4 @@ SimpleQueue Objects
 
    :class:`collections.deque` is an alternative implementation of unbounded
    queues with fast atomic :meth:`~collections.deque.append` and
-   :meth:`~collections.deque.popleft` operations that do not require locking
-   and also support indexing.
+   :meth:`~collections.deque.popleft` operations that do not require locking.

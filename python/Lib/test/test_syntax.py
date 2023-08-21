@@ -33,63 +33,35 @@ SyntaxError: invalid syntax
 
 >>> None = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to None
-
->>> obj.True = 1
-Traceback (most recent call last):
-SyntaxError: invalid syntax
-
->>> True = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to True
-
->>> (True := 1)
-Traceback (most recent call last):
-SyntaxError: cannot use assignment expressions with True
-
->>> obj.__debug__ = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> __debug__ = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> (__debug__ := 1)
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
+SyntaxError: can't assign to keyword
 
 >>> f() = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to function call
+SyntaxError: can't assign to function call
 
 >>> del f()
 Traceback (most recent call last):
-SyntaxError: cannot delete function call
+SyntaxError: can't delete function call
 
 >>> a + 1 = 2
 Traceback (most recent call last):
-SyntaxError: cannot assign to operator
+SyntaxError: can't assign to operator
 
 >>> (x for x in x) = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to generator expression
+SyntaxError: can't assign to generator expression
 
 >>> 1 = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to literal
+SyntaxError: can't assign to literal
 
 >>> "abc" = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to literal
+SyntaxError: can't assign to literal
 
 >>> b"" = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to literal
-
->>> ... = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to Ellipsis
+SyntaxError: can't assign to literal
 
 >>> `1` = 1
 Traceback (most recent call last):
@@ -102,130 +74,15 @@ them.
 
 >>> (a, "b", c) = (1, 2, 3)
 Traceback (most recent call last):
-SyntaxError: cannot assign to literal
-
->>> (a, True, c) = (1, 2, 3)
-Traceback (most recent call last):
-SyntaxError: cannot assign to True
-
->>> (a, __debug__, c) = (1, 2, 3)
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> (a, *True, c) = (1, 2, 3)
-Traceback (most recent call last):
-SyntaxError: cannot assign to True
-
->>> (a, *__debug__, c) = (1, 2, 3)
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
+SyntaxError: can't assign to literal
 
 >>> [a, b, c + 1] = [1, 2, 3]
 Traceback (most recent call last):
-SyntaxError: cannot assign to operator
-
->>> [a, b[1], c + 1] = [1, 2, 3]
-Traceback (most recent call last):
-SyntaxError: cannot assign to operator
-
->>> [a, b.c.d, c + 1] = [1, 2, 3]
-Traceback (most recent call last):
-SyntaxError: cannot assign to operator
+SyntaxError: can't assign to operator
 
 >>> a if 1 else b = 1
 Traceback (most recent call last):
-SyntaxError: cannot assign to conditional expression
-
->>> True = True = 3
-Traceback (most recent call last):
-SyntaxError: cannot assign to True
-
->>> x = y = True = z = 3
-Traceback (most recent call last):
-SyntaxError: cannot assign to True
-
->>> x = y = yield = 1
-Traceback (most recent call last):
-SyntaxError: assignment to yield expression not possible
-
->>> a, b += 1, 2
-Traceback (most recent call last):
-SyntaxError: 'tuple' is an illegal expression for augmented assignment
-
->>> (a, b) += 1, 2
-Traceback (most recent call last):
-SyntaxError: 'tuple' is an illegal expression for augmented assignment
-
->>> [a, b] += 1, 2
-Traceback (most recent call last):
-SyntaxError: 'list' is an illegal expression for augmented assignment
-
-Invalid targets in `for` loops and `with` statements should also
-produce a specialized error message
-
->>> for a() in b: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> for (a, b()) in b: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> for [a, b()] in b: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> for (*a, b, c+1) in b: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to operator
-
->>> for (x, *(y, z.d())) in b: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> for a, b() in c: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> for i < (): pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax
-
->>> for a, b
-Traceback (most recent call last):
-SyntaxError: invalid syntax
-
->>> with a as b(): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> with a as (b, c()): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> with a as [b, c()]: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> with a as (*b, c, d+1): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to operator
-
->>> with a as (x, *(y, z.d())): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> with a as b, c as d(): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to function call
-
->>> with a as b
-Traceback (most recent call last):
-SyntaxError: invalid syntax
-
->>> p = p =
-Traceback (most recent call last):
-SyntaxError: invalid syntax
+SyntaxError: can't assign to conditional expression
 
 From compiler_complex_args():
 
@@ -233,6 +90,7 @@ From compiler_complex_args():
 ...     pass
 Traceback (most recent call last):
 SyntaxError: invalid syntax
+
 
 From ast_for_arguments():
 
@@ -255,16 +113,6 @@ SyntaxError: invalid syntax
 ...     pass
 Traceback (most recent call last):
 SyntaxError: invalid syntax
-
->>> import ast; ast.parse('''
-... def f(
-...     *, # type: int
-...     a, # type: int
-... ):
-...     pass
-... ''', type_comments=True)
-Traceback (most recent call last):
-SyntaxError: bare * has associated type comment
 
 
 From ast_for_funcdef():
@@ -407,50 +255,33 @@ SyntaxError: invalid syntax
 
 >>> f(lambda x: x[0] = 3)
 Traceback (most recent call last):
-SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
-
-# Check that this error doesn't trigger for names:
->>> f(a={x: for x in {}})
-Traceback (most recent call last):
-SyntaxError: invalid syntax
+SyntaxError: lambda cannot contain assignment
 
 The grammar accepts any test (basically, any expression) in the
 keyword slot of a call site.  Test a few different options.
 
 >>> f(x()=2)
 Traceback (most recent call last):
-SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
+SyntaxError: keyword can't be an expression
 >>> f(a or b=1)
 Traceback (most recent call last):
-SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
+SyntaxError: keyword can't be an expression
 >>> f(x.y=1)
 Traceback (most recent call last):
-SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
->>> f((x)=2)
-Traceback (most recent call last):
-SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
->>> f(__debug__=1)
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
->>> __debug__: int
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
+SyntaxError: keyword can't be an expression
 
 
 More set_context():
 
 >>> (x for x in x) += 1
 Traceback (most recent call last):
-SyntaxError: 'generator expression' is an illegal expression for augmented assignment
+SyntaxError: can't assign to generator expression
 >>> None += 1
 Traceback (most recent call last):
-SyntaxError: 'None' is an illegal expression for augmented assignment
->>> __debug__ += 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
+SyntaxError: can't assign to keyword
 >>> f() += 1
 Traceback (most recent call last):
-SyntaxError: 'function call' is an illegal expression for augmented assignment
+SyntaxError: can't assign to function call
 
 
 Test continue in finally in weird combinations.
@@ -467,7 +298,7 @@ continue in for loop under finally should be ok.
     >>> test()
     9
 
-continue in a finally should be ok.
+Start simple, a continue in a finally should not be allowed.
 
     >>> def test():
     ...    for abc in range(10):
@@ -475,9 +306,11 @@ continue in a finally should be ok.
     ...            pass
     ...        finally:
     ...            continue
-    ...    print(abc)
-    >>> test()
-    9
+    Traceback (most recent call last):
+      ...
+    SyntaxError: 'continue' not supported inside 'finally' clause
+
+This is essentially a continue in a finally which should not be allowed.
 
     >>> def test():
     ...    for abc in range(10):
@@ -488,24 +321,9 @@ continue in a finally should be ok.
     ...                continue
     ...            except:
     ...                pass
-    ...    print(abc)
-    >>> test()
-    9
-
-    >>> def test():
-    ...    for abc in range(10):
-    ...        try:
-    ...            pass
-    ...        finally:
-    ...            try:
-    ...                pass
-    ...            except:
-    ...                continue
-    ...    print(abc)
-    >>> test()
-    9
-
-A continue outside loop should not be allowed.
+    Traceback (most recent call last):
+      ...
+    SyntaxError: 'continue' not supported inside 'finally' clause
 
     >>> def foo():
     ...     try:
@@ -514,7 +332,42 @@ A continue outside loop should not be allowed.
     ...         continue
     Traceback (most recent call last):
       ...
-    SyntaxError: 'continue' not properly in loop
+    SyntaxError: 'continue' not supported inside 'finally' clause
+
+    >>> def foo():
+    ...     for a in ():
+    ...       try:
+    ...           pass
+    ...       finally:
+    ...           continue
+    Traceback (most recent call last):
+      ...
+    SyntaxError: 'continue' not supported inside 'finally' clause
+
+    >>> def foo():
+    ...     for a in ():
+    ...         try:
+    ...             pass
+    ...         finally:
+    ...             try:
+    ...                 continue
+    ...             finally:
+    ...                 pass
+    Traceback (most recent call last):
+      ...
+    SyntaxError: 'continue' not supported inside 'finally' clause
+
+    >>> def foo():
+    ...  for a in ():
+    ...   try: pass
+    ...   finally:
+    ...    try:
+    ...     pass
+    ...    except:
+    ...     continue
+    Traceback (most recent call last):
+      ...
+    SyntaxError: 'continue' not supported inside 'finally' clause
 
 There is one test for a break that is not in a loop.  The compiler
 uses a single data structure to keep track of try-finally and loops,
@@ -530,6 +383,38 @@ isn't, there should be a syntax error.
    Traceback (most recent call last):
      ...
    SyntaxError: 'break' outside loop
+
+This raises a SyntaxError, it used to raise a SystemError.
+Context for this change can be found on issue #27514
+
+In 2.5 there was a missing exception and an assert was triggered in a debug
+build.  The number of blocks must be greater than CO_MAXBLOCKS.  SF #1565514
+
+   >>> while 1:
+   ...  while 2:
+   ...   while 3:
+   ...    while 4:
+   ...     while 5:
+   ...      while 6:
+   ...       while 8:
+   ...        while 9:
+   ...         while 10:
+   ...          while 11:
+   ...           while 12:
+   ...            while 13:
+   ...             while 14:
+   ...              while 15:
+   ...               while 16:
+   ...                while 17:
+   ...                 while 18:
+   ...                  while 19:
+   ...                   while 20:
+   ...                    while 21:
+   ...                     while 22:
+   ...                      break
+   Traceback (most recent call last):
+     ...
+   SyntaxError: too many statically nested blocks
 
 Misuse of the nonlocal and global statement can lead to a few unique syntax errors.
 
@@ -615,7 +500,7 @@ leading to spurious errors.
    ...   pass
    Traceback (most recent call last):
      ...
-   SyntaxError: cannot assign to function call
+   SyntaxError: can't assign to function call
 
    >>> if 1:
    ...   pass
@@ -623,27 +508,27 @@ leading to spurious errors.
    ...   x() = 1
    Traceback (most recent call last):
      ...
-   SyntaxError: cannot assign to function call
+   SyntaxError: can't assign to function call
 
    >>> if 1:
    ...   x() = 1
    ... elif 1:
    ...   pass
+   ... else:
+   ...   pass
+   Traceback (most recent call last):
+     ...
+   SyntaxError: can't assign to function call
+
+   >>> if 1:
+   ...   pass
+   ... elif 1:
+   ...   x() = 1
    ... else:
    ...   pass
    Traceback (most recent call last):
      ...
-   SyntaxError: cannot assign to function call
-
-   >>> if 1:
-   ...   pass
-   ... elif 1:
-   ...   x() = 1
-   ... else:
-   ...   pass
-   Traceback (most recent call last):
-     ...
-   SyntaxError: cannot assign to function call
+   SyntaxError: can't assign to function call
 
    >>> if 1:
    ...   pass
@@ -653,7 +538,7 @@ leading to spurious errors.
    ...   x() = 1
    Traceback (most recent call last):
      ...
-   SyntaxError: cannot assign to function call
+   SyntaxError: can't assign to function call
 
 Make sure that the old "raise X, Y[, Z]" form is gone:
    >>> raise X, Y
@@ -669,65 +554,25 @@ Make sure that the old "raise X, Y[, Z]" form is gone:
 >>> f(a=23, a=234)
 Traceback (most recent call last):
    ...
-SyntaxError: keyword argument repeated: a
+SyntaxError: keyword argument repeated
 
 >>> {1, 2, 3} = 42
 Traceback (most recent call last):
-SyntaxError: cannot assign to set display
-
->>> {1: 2, 3: 4} = 42
-Traceback (most recent call last):
-SyntaxError: cannot assign to dict display
-
->>> f'{x}' = 42
-Traceback (most recent call last):
-SyntaxError: cannot assign to f-string expression
-
->>> f'{x}-{y}' = 42
-Traceback (most recent call last):
-SyntaxError: cannot assign to f-string expression
-
->>> from t import x,
-Traceback (most recent call last):
-SyntaxError: trailing comma not allowed without surrounding parentheses
-
->>> from t import x,y,
-Traceback (most recent call last):
-SyntaxError: trailing comma not allowed without surrounding parentheses
-
-# Check that we dont raise the "trailing comma" error if there is more
-# input to the left of the valid part that we parsed.
-
->>> from t import x,y, and 3
-Traceback (most recent call last):
-SyntaxError: invalid syntax
-
->>> (): int
-Traceback (most recent call last):
-SyntaxError: only single target (not tuple) can be annotated
->>> []: int
-Traceback (most recent call last):
-SyntaxError: only single target (not list) can be annotated
->>> (()): int
-Traceback (most recent call last):
-SyntaxError: only single target (not tuple) can be annotated
->>> ([]): int
-Traceback (most recent call last):
-SyntaxError: only single target (not list) can be annotated
+SyntaxError: can't assign to literal
 
 Corner-cases that used to fail to raise the correct error:
 
     >>> def f(*, x=lambda __debug__:0): pass
     Traceback (most recent call last):
-    SyntaxError: cannot assign to __debug__
+    SyntaxError: assignment to keyword
 
     >>> def f(*args:(lambda __debug__:0)): pass
     Traceback (most recent call last):
-    SyntaxError: cannot assign to __debug__
+    SyntaxError: assignment to keyword
 
     >>> def f(**kwargs:(lambda __debug__:0)): pass
     Traceback (most recent call last):
-    SyntaxError: cannot assign to __debug__
+    SyntaxError: assignment to keyword
 
     >>> with (lambda *:0): pass
     Traceback (most recent call last):
@@ -737,15 +582,12 @@ Corner-cases that used to crash:
 
     >>> def f(**__debug__): pass
     Traceback (most recent call last):
-    SyntaxError: cannot assign to __debug__
+    SyntaxError: assignment to keyword
 
     >>> def f(*xx, __debug__): pass
     Traceback (most recent call last):
-    SyntaxError: cannot assign to __debug__
+    SyntaxError: assignment to keyword
 
-    >>> import ä £
-    Traceback (most recent call last):
-    SyntaxError: invalid character '£' (U+00A3)
 """
 
 import re
@@ -770,7 +612,7 @@ class SyntaxTestCase(unittest.TestCase):
                 self.fail("SyntaxError is not a %s" % subclass.__name__)
             mo = re.search(errtext, str(err))
             if mo is None:
-                self.fail("SyntaxError did not contain %r" % (errtext,))
+                self.fail("SyntaxError did not contain '%r'" % (errtext,))
             self.assertEqual(err.filename, filename)
             if lineno is not None:
                 self.assertEqual(err.lineno, lineno)
@@ -779,43 +621,11 @@ class SyntaxTestCase(unittest.TestCase):
         else:
             self.fail("compile() did not raise SyntaxError")
 
-    def test_curly_brace_after_primary_raises_immediately(self):
-        self._check_error("f{", "invalid syntax", mode="single")
-
     def test_assign_call(self):
         self._check_error("f() = 1", "assign")
 
-    @unittest.skipIf(support.use_old_parser(), "The old parser cannot generate these error messages")
     def test_assign_del(self):
-        self._check_error("del (,)", "invalid syntax")
-        self._check_error("del 1", "delete literal")
-        self._check_error("del (1, 2)", "delete literal")
-        self._check_error("del None", "delete None")
-        self._check_error("del *x", "delete starred")
-        self._check_error("del (*x)", "use starred expression")
-        self._check_error("del (*x,)", "delete starred")
-        self._check_error("del [*x,]", "delete starred")
-        self._check_error("del f()", "delete function call")
-        self._check_error("del f(a, b)", "delete function call")
-        self._check_error("del o.f()", "delete function call")
-        self._check_error("del a[0]()", "delete function call")
-        self._check_error("del x, f()", "delete function call")
-        self._check_error("del f(), x", "delete function call")
-        self._check_error("del [a, b, ((c), (d,), e.f())]", "delete function call")
-        self._check_error("del (a if True else b)", "delete conditional")
-        self._check_error("del +a", "delete operator")
-        self._check_error("del a, +b", "delete operator")
-        self._check_error("del a + b", "delete operator")
-        self._check_error("del (a + b, c)", "delete operator")
-        self._check_error("del (c[0], a + b)", "delete operator")
-        self._check_error("del a.b.c + 2", "delete operator")
-        self._check_error("del a.b.c[0] + 2", "delete operator")
-        self._check_error("del (a, b, (c, d.e.f + 2))", "delete operator")
-        self._check_error("del [a, b, (c, d.e.f[0] + 2)]", "delete operator")
-        self._check_error("del (a := 5)", "delete named expression")
-        # We don't have a special message for this, but make sure we don't
-        # report "cannot delete name"
-        self._check_error("del a += b", "invalid syntax")
+        self._check_error("del f()", "delete")
 
     def test_global_param_err_first(self):
         source = """if 1:
@@ -839,49 +649,6 @@ class SyntaxTestCase(unittest.TestCase):
 
     def test_break_outside_loop(self):
         self._check_error("break", "outside loop")
-
-    def test_yield_outside_function(self):
-        self._check_error("if 0: yield",                "outside function")
-        self._check_error("if 0: yield\nelse:  x=1",    "outside function")
-        self._check_error("if 1: pass\nelse: yield",    "outside function")
-        self._check_error("while 0: yield",             "outside function")
-        self._check_error("while 0: yield\nelse:  x=1", "outside function")
-        self._check_error("class C:\n  if 0: yield",    "outside function")
-        self._check_error("class C:\n  if 1: pass\n  else: yield",
-                          "outside function")
-        self._check_error("class C:\n  while 0: yield", "outside function")
-        self._check_error("class C:\n  while 0: yield\n  else:  x = 1",
-                          "outside function")
-
-    def test_return_outside_function(self):
-        self._check_error("if 0: return",                "outside function")
-        self._check_error("if 0: return\nelse:  x=1",    "outside function")
-        self._check_error("if 1: pass\nelse: return",    "outside function")
-        self._check_error("while 0: return",             "outside function")
-        self._check_error("class C:\n  if 0: return",    "outside function")
-        self._check_error("class C:\n  while 0: return", "outside function")
-        self._check_error("class C:\n  while 0: return\n  else:  x=1",
-                          "outside function")
-        self._check_error("class C:\n  if 0: return\n  else: x= 1",
-                          "outside function")
-        self._check_error("class C:\n  if 1: pass\n  else: return",
-                          "outside function")
-
-    def test_break_outside_loop(self):
-        self._check_error("if 0: break",             "outside loop")
-        self._check_error("if 0: break\nelse:  x=1",  "outside loop")
-        self._check_error("if 1: pass\nelse: break", "outside loop")
-        self._check_error("class C:\n  if 0: break", "outside loop")
-        self._check_error("class C:\n  if 1: pass\n  else: break",
-                          "outside loop")
-
-    def test_continue_outside_loop(self):
-        self._check_error("if 0: continue",             "not properly in loop")
-        self._check_error("if 0: continue\nelse:  x=1", "not properly in loop")
-        self._check_error("if 1: pass\nelse: continue", "not properly in loop")
-        self._check_error("class C:\n  if 0: continue", "not properly in loop")
-        self._check_error("class C:\n  if 1: pass\n  else: continue",
-                          "not properly in loop")
 
     def test_unexpected_indent(self):
         self._check_error("foo()\n bar()\n", "unexpected indent",
@@ -909,109 +676,6 @@ class SyntaxTestCase(unittest.TestCase):
         self._check_error("int(**{'base': 10}, *['2'])",
                           "iterable argument unpacking follows "
                           "keyword argument unpacking")
-
-    def test_empty_line_after_linecont(self):
-        # See issue-40847
-        s = r"""\
-pass
-        \
-
-pass
-"""
-        try:
-            compile(s, '<string>', 'exec')
-        except SyntaxError:
-            self.fail("Empty line after a line continuation character is valid.")
-
-    @support.cpython_only
-    def test_nested_named_except_blocks(self):
-        code = ""
-        for i in range(12):
-            code += f"{'    '*i}try:\n"
-            code += f"{'    '*(i+1)}raise Exception\n"
-            code += f"{'    '*i}except Exception as e:\n"
-        code += f"{' '*4*12}pass"
-        self._check_error(code, "too many statically nested blocks")
-
-    def test_barry_as_flufl_with_syntax_errors(self):
-        # The "barry_as_flufl" rule can produce some "bugs-at-a-distance" if
-        # is reading the wrong token in the presence of syntax errors later
-        # in the file. See bpo-42214 for more information.
-        code = """
-def func1():
-    if a != b:
-        raise ValueError
-
-def func2():
-    try
-        return 1
-    finally:
-        pass
-"""
-        self._check_error(code, "invalid syntax")
-
-    def test_invalid_line_continuation_error_position(self):
-        self._check_error(r"a = 3 \ 4",
-                          "unexpected character after line continuation character",
-                          lineno=1, offset=8)
-        self._check_error('1,\\#\n2',
-                          "unexpected character after line continuation character",
-                          lineno=1, offset=4)
-        self._check_error('\nfgdfgf\n1,\\#\n2\n',
-                          "unexpected character after line continuation character",
-                          lineno=3, offset=4)
-
-    def test_invalid_line_continuation_left_recursive(self):
-        # Check bpo-42218: SyntaxErrors following left-recursive rules
-        # (t_primary_raw in this case) need to be tested explicitly
-        self._check_error("A.\u018a\\ ",
-                          "unexpected character after line continuation character")
-        self._check_error("A.\u03bc\\\n",
-                          "unexpected EOF while parsing")
-
-    @support.cpython_only
-    def test_syntax_error_on_deeply_nested_blocks(self):
-        # This raises a SyntaxError, it used to raise a SystemError. Context
-        # for this change can be found on issue #27514
-
-        # In 2.5 there was a missing exception and an assert was triggered in a
-        # debug build.  The number of blocks must be greater than CO_MAXBLOCKS.
-        # SF #1565514
-
-        source = """
-while 1:
- while 2:
-  while 3:
-   while 4:
-    while 5:
-     while 6:
-      while 8:
-       while 9:
-        while 10:
-         while 11:
-          while 12:
-           while 13:
-            while 14:
-             while 15:
-              while 16:
-               while 17:
-                while 18:
-                 while 19:
-                  while 20:
-                   while 21:
-                    while 22:
-                     break
-"""
-        self._check_error(source, "too many statically nested blocks")
-
-    @support.cpython_only
-    def test_error_on_parser_stack_overflow(self):
-        source = "-" * 100000 + "4"
-        for mode in ["exec", "eval", "single"]:
-            with self.subTest(mode=mode):
-                with self.assertRaises(MemoryError):
-                    compile(source, "<string>", mode)
-
 
 def test_main():
     support.run_unittest(SyntaxTestCase)

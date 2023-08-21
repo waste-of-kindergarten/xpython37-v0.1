@@ -18,7 +18,7 @@ def _async_test(func):
             return loop.run_until_complete(coro)
         finally:
             loop.close()
-            asyncio.set_event_loop_policy(None)
+            asyncio.set_event_loop(None)
     return wrapper
 
 
@@ -207,18 +207,7 @@ class AsyncContextManagerTestCase(unittest.TestCase):
         async def woohoo():
             yield
 
-        class StopIterationSubclass(StopIteration):
-            pass
-
-        class StopAsyncIterationSubclass(StopAsyncIteration):
-            pass
-
-        for stop_exc in (
-            StopIteration('spam'),
-            StopAsyncIteration('ham'),
-            StopIterationSubclass('spam'),
-            StopAsyncIterationSubclass('spam')
-        ):
+        for stop_exc in (StopIteration('spam'), StopAsyncIteration('ham')):
             with self.subTest(type=type(stop_exc)):
                 try:
                     async with woohoo():
@@ -328,7 +317,6 @@ class TestAsyncExitStack(TestBaseExitStack, unittest.TestCase):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.addCleanup(self.loop.close)
-        self.addCleanup(asyncio.set_event_loop_policy, None)
 
     @_async_test
     async def test_async_callback(self):
@@ -369,9 +357,8 @@ class TestAsyncExitStack(TestBaseExitStack, unittest.TestCase):
                 stack.push_async_callback(arg=1)
             with self.assertRaises(TypeError):
                 self.exit_stack.push_async_callback(arg=2)
-            with self.assertRaises(TypeError):
-                stack.push_async_callback(callback=_exit, arg=3)
-        self.assertEqual(result, [])
+            stack.push_async_callback(callback=_exit, arg=3)
+        self.assertEqual(result, [((), {'arg': 3})])
 
     @_async_test
     async def test_async_push(self):
@@ -462,41 +449,6 @@ class TestAsyncExitStack(TestBaseExitStack, unittest.TestCase):
         inner_exc = saved_details[1]
         self.assertIsInstance(inner_exc, ValueError)
         self.assertIsInstance(inner_exc.__context__, ZeroDivisionError)
-
-    @_async_test
-    async def test_async_exit_exception_explicit_none_context(self):
-        # Ensure AsyncExitStack chaining matches actual nested `with` statements
-        # regarding explicit __context__ = None.
-
-        class MyException(Exception):
-            pass
-
-        @asynccontextmanager
-        async def my_cm():
-            try:
-                yield
-            except BaseException:
-                exc = MyException()
-                try:
-                    raise exc
-                finally:
-                    exc.__context__ = None
-
-        @asynccontextmanager
-        async def my_cm_with_exit_stack():
-            async with self.exit_stack() as stack:
-                await stack.enter_async_context(my_cm())
-                yield stack
-
-        for cm in (my_cm, my_cm_with_exit_stack):
-            with self.subTest():
-                try:
-                    async with cm():
-                        raise IndexError()
-                except MyException as exc:
-                    self.assertIsNone(exc.__context__)
-                else:
-                    self.fail("Expected IndexError, but no exception was raised")
 
 
 if __name__ == '__main__':

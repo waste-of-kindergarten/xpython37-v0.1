@@ -6,12 +6,11 @@ import unittest
 import os
 from difflib import unified_diff
 from io import StringIO
-from test.support import TESTFN, unlink, temp_dir, change_cwd
+from test.support import TESTFN, run_unittest, unlink
 from contextlib import contextmanager
 
 import profile
 from test.profilee import testfunc, timer
-from test.support.script_helper import assert_python_failure, assert_python_ok
 
 
 class ProfileTest(unittest.TestCase):
@@ -99,32 +98,6 @@ class ProfileTest(unittest.TestCase):
                                   filename=TESTFN)
         self.assertTrue(os.path.exists(TESTFN))
 
-    def test_run_profile_as_module(self):
-        # Test that -m switch needs an argument
-        assert_python_failure('-m', self.profilermodule.__name__, '-m')
-
-        # Test failure for not-existent module
-        assert_python_failure('-m', self.profilermodule.__name__,
-                              '-m', 'random_module_xyz')
-
-        # Test successful run
-        assert_python_ok('-m', self.profilermodule.__name__,
-                         '-m', 'timeit', '-n', '1')
-
-    def test_output_file_when_changing_directory(self):
-        with temp_dir() as tmpdir, change_cwd(tmpdir):
-            os.mkdir('dest')
-            with open('demo.py', 'w') as f:
-                f.write('import os; os.chdir("dest")')
-
-            assert_python_ok(
-                '-m', self.profilermodule.__name__,
-                '-o', 'out.pstats',
-                'demo.py',
-            )
-
-            self.assertTrue(os.path.exists('out.pstats'))
-
 
 def regenerate_expected_output(filename, cls):
     filename = filename.rstrip('co')
@@ -155,10 +128,12 @@ def silent():
     finally:
         sys.stdout = stdout
 
+def test_main():
+    run_unittest(ProfileTest)
 
 def main():
     if '-r' not in sys.argv:
-        unittest.main()
+        test_main()
     else:
         regenerate_expected_output(__file__, ProfileTest)
 

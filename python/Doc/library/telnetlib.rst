@@ -3,17 +3,12 @@
 
 .. module:: telnetlib
    :synopsis: Telnet client class.
-   :deprecated:
 
 .. sectionauthor:: Skip Montanaro <skip@pobox.com>
 
 **Source code:** :source:`Lib/telnetlib.py`
 
 .. index:: single: protocol; Telnet
-
-.. deprecated:: 3.11
-   The :mod:`telnetlib` module is deprecated
-   (see :pep:`PEP 594 <594#telnetlib>` for details and alternatives).
 
 --------------
 
@@ -146,8 +141,6 @@ Telnet Objects
 
    Do not try to reopen an already connected instance.
 
-   .. audit-event:: telnetlib.Telnet.open self,host,port telnetlib.Telnet.open
-
 
 .. method:: Telnet.msg(msg, *args)
 
@@ -182,8 +175,6 @@ Telnet Objects
    Write a byte string to the socket, doubling any IAC characters. This can
    block if the connection is blocked.  May raise :exc:`OSError` if the
    connection is closed.
-
-   .. audit-event:: telnetlib.Telnet.write self,buffer telnetlib.Telnet.write
 
    .. versionchanged:: 3.3
       This method used to raise :exc:`socket.error`, which is now an alias

@@ -81,14 +81,12 @@ def _maybe_compile(compiler, source, filename, symbol):
 
     try:
         code = compiler(source, filename, symbol)
-    except SyntaxError:
+    except SyntaxError as err:
         pass
 
-    # Catch syntax warnings after the first compile
-    # to emit warnings (SyntaxWarning, DeprecationWarning) at most once.
+    # Suppress warnings after the first compile to avoid duplication.
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
-
+        warnings.simplefilter("ignore")
         try:
             code1 = compiler(source + "\n", filename, symbol)
         except SyntaxError as e:
@@ -140,7 +138,7 @@ class Compile:
         self.flags = PyCF_DONT_IMPLY_DEDENT
 
     def __call__(self, source, filename, symbol):
-        codeob = compile(source, filename, symbol, self.flags, True)
+        codeob = compile(source, filename, symbol, self.flags, 1)
         for feature in _features:
             if codeob.co_flags & feature.compiler_flag:
                 self.flags |= feature.compiler_flag

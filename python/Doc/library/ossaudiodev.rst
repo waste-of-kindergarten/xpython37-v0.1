@@ -4,11 +4,6 @@
 .. module:: ossaudiodev
    :platform: Linux, FreeBSD
    :synopsis: Access to OSS-compatible audio devices.
-   :deprecated:
-
-.. deprecated:: 3.11
-   The :mod:`ossaudiodev` module is deprecated
-   (see :pep:`PEP 594 <594#ossaudiodev>` for details).
 
 --------------
 

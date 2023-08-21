@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _weakrefobjects:
 
@@ -13,18 +13,17 @@ as much as it can.
 
 .. c:function:: int PyWeakref_Check(ob)
 
-   Return true if *ob* is either a reference or proxy object.  This function
-   always succeeds.
+   Return true if *ob* is either a reference or proxy object.
 
 
 .. c:function:: int PyWeakref_CheckRef(ob)
 
-   Return true if *ob* is a reference object.  This function always succeeds.
+   Return true if *ob* is a reference object.
 
 
 .. c:function:: int PyWeakref_CheckProxy(ob)
 
-   Return true if *ob* is a proxy object.  This function always succeeds.
+   Return true if *ob* is a proxy object.
 
 
 .. c:function:: PyObject* PyWeakref_NewRef(PyObject *ob, PyObject *callback)

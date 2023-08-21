@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _datetimeobjects:
 
@@ -28,66 +28,61 @@ Type-check macros:
 .. c:function:: int PyDate_Check(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DateType` or a subtype of
-   :c:data:`PyDateTime_DateType`.  *ob* must not be ``NULL``.  This function always
-   succeeds.
+   :c:data:`PyDateTime_DateType`.  *ob* must not be ``NULL``.
 
 
 .. c:function:: int PyDate_CheckExact(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DateType`. *ob* must not be
-   ``NULL``.  This function always succeeds.
+   ``NULL``.
 
 
 .. c:function:: int PyDateTime_Check(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DateTimeType` or a subtype of
-   :c:data:`PyDateTime_DateTimeType`.  *ob* must not be ``NULL``.  This function always
-   succeeds.
+   :c:data:`PyDateTime_DateTimeType`.  *ob* must not be ``NULL``.
 
 
 .. c:function:: int PyDateTime_CheckExact(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DateTimeType`. *ob* must not
-   be ``NULL``.  This function always succeeds.
+   be ``NULL``.
 
 
 .. c:function:: int PyTime_Check(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_TimeType` or a subtype of
-   :c:data:`PyDateTime_TimeType`.  *ob* must not be ``NULL``.  This function always
-   succeeds.
+   :c:data:`PyDateTime_TimeType`.  *ob* must not be ``NULL``.
 
 
 .. c:function:: int PyTime_CheckExact(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_TimeType`. *ob* must not be
-   ``NULL``.  This function always succeeds.
+   ``NULL``.
 
 
 .. c:function:: int PyDelta_Check(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DeltaType` or a subtype of
-   :c:data:`PyDateTime_DeltaType`.  *ob* must not be ``NULL``.  This function always
-   succeeds.
+   :c:data:`PyDateTime_DeltaType`.  *ob* must not be ``NULL``.
 
 
 .. c:function:: int PyDelta_CheckExact(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_DeltaType`. *ob* must not be
-   ``NULL``.  This function always succeeds.
+   ``NULL``.
 
 
 .. c:function:: int PyTZInfo_Check(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_TZInfoType` or a subtype of
-   :c:data:`PyDateTime_TZInfoType`.  *ob* must not be ``NULL``.  This function always
-   succeeds.
+   :c:data:`PyDateTime_TZInfoType`.  *ob* must not be ``NULL``.
 
 
 .. c:function:: int PyTZInfo_CheckExact(PyObject *ob)
 
    Return true if *ob* is of type :c:data:`PyDateTime_TZInfoType`. *ob* must not be
-   ``NULL``.  This function always succeeds.
+   ``NULL``.
 
 
 Macros to create objects:

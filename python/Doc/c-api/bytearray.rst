@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _bytearrayobjects:
 
@@ -25,13 +25,13 @@ Type check macros
 .. c:function:: int PyByteArray_Check(PyObject *o)
 
    Return true if the object *o* is a bytearray object or an instance of a
-   subtype of the bytearray type.  This function always succeeds.
+   subtype of the bytearray type.
 
 
 .. c:function:: int PyByteArray_CheckExact(PyObject *o)
 
    Return true if the object *o* is a bytearray object, but not an instance of a
-   subtype of the bytearray type.  This function always succeeds.
+   subtype of the bytearray type.
 
 
 Direct API functions
@@ -41,6 +41,8 @@ Direct API functions
 
    Return a new bytearray object from any object, *o*, that implements the
    :ref:`buffer protocol <bufferobjects>`.
+
+   .. XXX expand about the buffer protocol, at least somewhere
 
 
 .. c:function:: PyObject* PyByteArray_FromStringAndSize(const char *string, Py_ssize_t len)

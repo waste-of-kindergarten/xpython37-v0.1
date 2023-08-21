@@ -11,7 +11,7 @@ import warnings
 from . import connection
 from . import process
 from .context import reduction
-from . import resource_tracker
+from . import semaphore_tracker
 from . import spawn
 from . import util
 
@@ -55,8 +55,7 @@ class ForkServer(object):
         os.waitpid(self._forkserver_pid, 0)
         self._forkserver_pid = None
 
-        if not util.is_abstract_socket_namespace(self._forkserver_address):
-            os.unlink(self._forkserver_address)
+        os.unlink(self._forkserver_address)
         self._forkserver_address = None
 
     def set_forkserver_preload(self, modules_names):
@@ -89,7 +88,7 @@ class ForkServer(object):
             parent_r, child_w = os.pipe()
             child_r, parent_w = os.pipe()
             allfds = [child_r, child_w, self._forkserver_alive_fd,
-                      resource_tracker.getfd()]
+                      semaphore_tracker.getfd()]
             allfds += fds
             try:
                 reduction.sendfds(client, allfds)
@@ -110,7 +109,7 @@ class ForkServer(object):
         ensure_running() will do nothing.
         '''
         with self._lock:
-            resource_tracker.ensure_running()
+            semaphore_tracker.ensure_running()
             if self._forkserver_pid is not None:
                 # forkserver was launched before, is it still running?
                 pid, status = os.waitpid(self._forkserver_pid, os.WNOHANG)
@@ -237,8 +236,14 @@ def main(listener_fd, alive_r, preload, main_path=None, sys_path=None):
                             break
                         child_w = pid_to_fd.pop(pid, None)
                         if child_w is not None:
-                            returncode = os.waitstatus_to_exitcode(sts)
-
+                            if os.WIFSIGNALED(sts):
+                                returncode = -os.WTERMSIG(sts)
+                            else:
+                                if not os.WIFEXITED(sts):
+                                    raise AssertionError(
+                                        "Child {0:n} status is {1:n}".format(
+                                            pid,sts))
+                                returncode = os.WEXITSTATUS(sts)
                             # Send exit code to client process
                             try:
                                 write_signed(child_w, returncode)
@@ -305,12 +310,11 @@ def _serve_one(child_r, fds, unused_fds, handlers):
         os.close(fd)
 
     (_forkserver._forkserver_alive_fd,
-     resource_tracker._resource_tracker._fd,
+     semaphore_tracker._semaphore_tracker._fd,
      *_forkserver._inherited_fds) = fds
 
     # Run process object received over pipe
-    parent_sentinel = os.dup(child_r)
-    code = spawn._main(child_r, parent_sentinel)
+    code = spawn._main(child_r)
 
     return code
 

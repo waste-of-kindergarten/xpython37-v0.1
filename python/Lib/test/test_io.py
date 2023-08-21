@@ -28,7 +28,7 @@ import pickle
 import random
 import signal
 import sys
-import textwrap
+import sysconfig
 import threading
 import time
 import unittest
@@ -37,9 +37,8 @@ import weakref
 from collections import deque, UserList
 from itertools import cycle, count
 from test import support
-from test.support.script_helper import (
-    assert_python_ok, assert_python_failure, run_python_until_end)
-from test.support import FakePath, skip_if_sanitizer
+from test.support.script_helper import assert_python_ok, run_python_until_end
+from test.support import FakePath
 
 import codecs
 import io  # C implementation of io
@@ -61,10 +60,12 @@ else:
     class EmptyStruct(ctypes.Structure):
         pass
 
-# Does io.IOBase finalizer log the exception if the close() method fails?
-# The exception is ignored silently by default in release build.
-IOBASE_EMITS_UNRAISABLE = (hasattr(sys, "gettotalrefcount") or sys.flags.dev_mode)
-
+_cflags = sysconfig.get_config_var('CFLAGS') or ''
+_config_args = sysconfig.get_config_var('CONFIG_ARGS') or ''
+MEMORY_SANITIZER = (
+    '-fsanitize=memory' in _cflags or
+    '--with-memory-sanitizer' in _config_args
+)
 
 def _default_chunk_size():
     """Get the default TextIOWrapper chunk size"""
@@ -270,10 +271,6 @@ class MockNonBlockWriterIO:
 
     def seekable(self):
         return True
-
-    def seek(self, pos, whence=0):
-        # naive implementation, enough for tests
-        return 0
 
     def writable(self):
         return True
@@ -604,7 +601,7 @@ class IOTest(unittest.TestCase):
             self.large_file_ops(f)
 
     def test_with_open(self):
-        for bufsize in (0, 100):
+        for bufsize in (0, 1, 100):
             f = None
             with self.open(support.TESTFN, "wb", bufsize) as f:
                 f.write(b"xxx")
@@ -916,7 +913,7 @@ class IOTest(unittest.TestCase):
                 self.assertEqual(f.read(), "egg\n")
 
         check_path_succeeds(FakePath(support.TESTFN))
-        check_path_succeeds(FakePath(os.fsencode(support.TESTFN)))
+        check_path_succeeds(FakePath(support.TESTFN.encode('utf-8')))
 
         with self.open(support.TESTFN, "w") as f:
             bad_path = FakePath(f.fileno())
@@ -993,9 +990,6 @@ class IOTest(unittest.TestCase):
         f = R()
         # This would cause an assertion failure.
         self.assertRaises(OSError, f.close)
-
-        # Silence destructor error
-        R.flush = lambda self: None
 
 
 class CIOTest(IOTest):
@@ -1101,14 +1095,16 @@ class CommonBufferedTests:
         # Test that the exception state is not modified by a destructor,
         # even if close() fails.
         rawio = self.CloseFailureIO()
-        with support.catch_unraisable_exception() as cm:
-            with self.assertRaises(AttributeError):
-                self.tp(rawio).xyzzy
-
-            if not IOBASE_EMITS_UNRAISABLE:
-                self.assertIsNone(cm.unraisable)
-            elif cm.unraisable is not None:
-                self.assertEqual(cm.unraisable.exc_type, OSError)
+        def f():
+            self.tp(rawio).xyzzy
+        with support.captured_output("stderr") as s:
+            self.assertRaises(AttributeError, f)
+        s = s.getvalue().strip()
+        if s:
+            # The destructor *may* have printed an unraisable error, check it
+            self.assertEqual(len(s.splitlines()), 1)
+            self.assertTrue(s.startswith("Exception OSError: "), s)
+            self.assertTrue(s.endswith(" ignored"), s)
 
     def test_repr(self):
         raw = self.MockRawIO()
@@ -1164,10 +1160,6 @@ class CommonBufferedTests:
         self.assertEqual(err.exception.__context__.args, ('flush',))
         self.assertFalse(b.closed)
 
-        # Silence destructor error
-        raw.close = lambda: None
-        b.flush = lambda: None
-
     def test_nonnormalized_close_error_on_close(self):
         # Issue #21677
         raw = self.MockRawIO()
@@ -1184,10 +1176,6 @@ class CommonBufferedTests:
         self.assertIsInstance(err.exception.__context__, NameError)
         self.assertIn('non_existing_flush', str(err.exception.__context__))
         self.assertFalse(b.closed)
-
-        # Silence destructor error
-        b.flush = lambda: None
-        raw.close = lambda: None
 
     def test_multi_close(self):
         raw = self.MockRawIO()
@@ -1489,9 +1477,6 @@ class BufferedReaderTest(unittest.TestCase, CommonBufferedTests):
         self.assertRaises(OSError, bufio.seek, 0)
         self.assertRaises(OSError, bufio.tell)
 
-        # Silence destructor error
-        bufio.close = lambda: None
-
     def test_no_extraneous_read(self):
         # Issue #9550; when the raw IO object has satisfied the read request,
         # we should not issue any additional reads, otherwise it may block
@@ -1520,19 +1505,12 @@ class BufferedReaderTest(unittest.TestCase, CommonBufferedTests):
         self.assertRaises(ValueError, b.peek)
         self.assertRaises(ValueError, b.read1, 1)
 
-    def test_truncate_on_read_only(self):
-        rawio = self.MockFileIO(b"abc")
-        bufio = self.tp(rawio)
-        self.assertFalse(bufio.writable())
-        self.assertRaises(self.UnsupportedOperation, bufio.truncate)
-        self.assertRaises(self.UnsupportedOperation, bufio.truncate, 0)
-
 
 class CBufferedReaderTest(BufferedReaderTest, SizeofTest):
     tp = io.BufferedReader
 
-    @skip_if_sanitizer(memory=True, address=True, reason= "sanitizer defaults to crashing "
-                       "instead of returning NULL for malloc failure.")
+    @unittest.skipIf(MEMORY_SANITIZER, "MSan defaults to crashing "
+                     "instead of returning NULL for malloc failure.")
     def test_constructor(self):
         BufferedReaderTest.test_constructor(self)
         # The allocation can succeed on 32-bit builds, e.g. with more
@@ -1847,9 +1825,6 @@ class BufferedWriterTest(unittest.TestCase, CommonBufferedTests):
         self.assertRaises(OSError, bufio.tell)
         self.assertRaises(OSError, bufio.write, b"abcdef")
 
-        # Silence destructor error
-        bufio.close = lambda: None
-
     def test_max_buffer_size_removal(self):
         with self.assertRaises(TypeError):
             self.tp(self.MockRawIO(), 8, 12)
@@ -1880,8 +1855,8 @@ class BufferedWriterTest(unittest.TestCase, CommonBufferedTests):
 class CBufferedWriterTest(BufferedWriterTest, SizeofTest):
     tp = io.BufferedWriter
 
-    @skip_if_sanitizer(memory=True, address=True, reason= "sanitizer defaults to crashing "
-                       "instead of returning NULL for malloc failure.")
+    @unittest.skipIf(MEMORY_SANITIZER, "MSan defaults to crashing "
+                     "instead of returning NULL for malloc failure.")
     def test_constructor(self):
         BufferedWriterTest.test_constructor(self)
         # The allocation can succeed on 32-bit builds, e.g. with more
@@ -2057,9 +2032,6 @@ class BufferedRWPairTest(unittest.TestCase):
         self.assertFalse(reader.closed)
         self.assertTrue(writer.closed)
 
-        # Silence destructor error
-        reader.close = lambda: None
-
     def test_writer_close_error_on_close(self):
         def writer_close():
             writer_non_existing
@@ -2073,18 +2045,6 @@ class BufferedRWPairTest(unittest.TestCase):
         self.assertFalse(pair.closed)
         self.assertTrue(reader.closed)
         self.assertFalse(writer.closed)
-
-        # Silence destructor error
-        writer.close = lambda: None
-        writer = None
-
-        # Ignore BufferedWriter (of the BufferedRWPair) unraisable exception
-        with support.catch_unraisable_exception():
-            # Ignore BufferedRWPair unraisable exception
-            with support.catch_unraisable_exception():
-                pair = None
-                support.gc_collect()
-            support.gc_collect()
 
     def test_reader_writer_close_error_on_close(self):
         def reader_close():
@@ -2104,10 +2064,6 @@ class BufferedRWPairTest(unittest.TestCase):
         self.assertFalse(pair.closed)
         self.assertFalse(reader.closed)
         self.assertFalse(writer.closed)
-
-        # Silence destructor error
-        reader.close = lambda: None
-        writer.close = lambda: None
 
     def test_isatty(self):
         class SelectableIsAtty(MockRawIO):
@@ -2371,16 +2327,12 @@ class BufferedRandomTest(BufferedReaderTest, BufferedWriterTest):
     # You can't construct a BufferedRandom over a non-seekable stream.
     test_unseekable = None
 
-    # writable() returns True, so there's no point to test it over
-    # a writable stream.
-    test_truncate_on_read_only = None
-
 
 class CBufferedRandomTest(BufferedRandomTest, SizeofTest):
     tp = io.BufferedRandom
 
-    @skip_if_sanitizer(memory=True, address=True, reason= "sanitizer defaults to crashing "
-                       "instead of returning NULL for malloc failure.")
+    @unittest.skipIf(MEMORY_SANITIZER, "MSan defaults to crashing "
+                     "instead of returning NULL for malloc failure.")
     def test_constructor(self):
         BufferedRandomTest.test_constructor(self)
         # The allocation can succeed on 32-bit builds, e.g. with more
@@ -2879,14 +2831,16 @@ class TextIOWrapperTest(unittest.TestCase):
         # Test that the exception state is not modified by a destructor,
         # even if close() fails.
         rawio = self.CloseFailureIO()
-        with support.catch_unraisable_exception() as cm:
-            with self.assertRaises(AttributeError):
-                self.TextIOWrapper(rawio).xyzzy
-
-            if not IOBASE_EMITS_UNRAISABLE:
-                self.assertIsNone(cm.unraisable)
-            elif cm.unraisable is not None:
-                self.assertEqual(cm.unraisable.exc_type, OSError)
+        def f():
+            self.TextIOWrapper(rawio).xyzzy
+        with support.captured_output("stderr") as s:
+            self.assertRaises(AttributeError, f)
+        s = s.getvalue().strip()
+        if s:
+            # The destructor *may* have printed an unraisable error, check it
+            self.assertEqual(len(s.splitlines()), 1)
+            self.assertTrue(s.startswith("Exception OSError: "), s)
+            self.assertTrue(s.endswith(" ignored"), s)
 
     # Systematic tests of the text I/O API
 
@@ -3035,34 +2989,6 @@ class TextIOWrapperTest(unittest.TestCase):
         # Ensure our test decoder won't interfere with subsequent tests.
         finally:
             StatefulIncrementalDecoder.codecEnabled = 0
-
-    def test_multibyte_seek_and_tell(self):
-        f = self.open(support.TESTFN, "w", encoding="euc_jp")
-        f.write("AB\n\u3046\u3048\n")
-        f.close()
-
-        f = self.open(support.TESTFN, "r", encoding="euc_jp")
-        self.assertEqual(f.readline(), "AB\n")
-        p0 = f.tell()
-        self.assertEqual(f.readline(), "\u3046\u3048\n")
-        p1 = f.tell()
-        f.seek(p0)
-        self.assertEqual(f.readline(), "\u3046\u3048\n")
-        self.assertEqual(f.tell(), p1)
-        f.close()
-
-    def test_seek_with_encoder_state(self):
-        f = self.open(support.TESTFN, "w", encoding="euc_jis_2004")
-        f.write("\u00e6\u0300")
-        p0 = f.tell()
-        f.write("\u00e6")
-        f.seek(p0)
-        f.write("\u0300")
-        f.close()
-
-        f = self.open(support.TESTFN, "r", encoding="euc_jis_2004")
-        self.assertEqual(f.readline(), "\u00e6\u0300\u0300")
-        f.close()
 
     def test_encoded_writes(self):
         data = "1234567890"
@@ -3302,10 +3228,6 @@ class TextIOWrapperTest(unittest.TestCase):
         self.assertEqual(err.exception.__context__.args, ('flush',))
         self.assertFalse(txt.closed)
 
-        # Silence destructor error
-        buffer.close = lambda: None
-        txt.flush = lambda: None
-
     def test_nonnormalized_close_error_on_close(self):
         # Issue #21677
         buffer = self.BytesIO(self.testdata)
@@ -3322,10 +3244,6 @@ class TextIOWrapperTest(unittest.TestCase):
         self.assertIsInstance(err.exception.__context__, NameError)
         self.assertIn('non_existing_flush', str(err.exception.__context__))
         self.assertFalse(txt.closed)
-
-        # Silence destructor error
-        buffer.close = lambda: None
-        txt.flush = lambda: None
 
     def test_multi_close(self):
         txt = self.TextIOWrapper(self.BytesIO(self.testdata), encoding="ascii")
@@ -3500,6 +3418,7 @@ class TextIOWrapperTest(unittest.TestCase):
             """.format(iomod=iomod, kwargs=kwargs)
         return assert_python_ok("-c", code)
 
+    @support.requires_type_collecting
     def test_create_at_shutdown_without_encoding(self):
         rc, out, err = self._check_create_at_shutdown()
         if err:
@@ -3509,6 +3428,7 @@ class TextIOWrapperTest(unittest.TestCase):
         else:
             self.assertEqual("ok", out.decode().strip())
 
+    @support.requires_type_collecting
     def test_create_at_shutdown_with_encoding(self):
         rc, out, err = self._check_create_at_shutdown(encoding='utf-8',
                                                       errors='strict')
@@ -3691,7 +3611,7 @@ def _to_memoryview(buf):
 
 class CTextIOWrapperTest(TextIOWrapperTest):
     io = io
-    shutdown_error = "LookupError: unknown encoding: ascii"
+    shutdown_error = "RuntimeError: could not find io module state"
 
     def test_initialization(self):
         r = self.BytesIO(b"\xc3\xa9\n\n")
@@ -3738,33 +3658,6 @@ class CTextIOWrapperTest(TextIOWrapperTest):
         t = self.TextIOWrapper(self.BytesIO(), encoding='ascii')
         with self.assertRaises(AttributeError):
             del t._CHUNK_SIZE
-
-    def test_internal_buffer_size(self):
-        # bpo-43260: TextIOWrapper's internal buffer should not store
-        # data larger than chunk size.
-        chunk_size = 8192  # default chunk size, updated later
-
-        class MockIO(self.MockRawIO):
-            def write(self, data):
-                if len(data) > chunk_size:
-                    raise RuntimeError
-                return super().write(data)
-
-        buf = MockIO()
-        t = self.TextIOWrapper(buf, encoding="ascii")
-        chunk_size = t._CHUNK_SIZE
-        t.write("abc")
-        t.write("def")
-        # default chunk size is 8192 bytes so t don't write data to buf.
-        self.assertEqual([], buf._write_stack)
-
-        with self.assertRaises(RuntimeError):
-            t.write("x"*(chunk_size+1))
-
-        self.assertEqual([b"abcdef"], buf._write_stack)
-        t.write("ghi")
-        t.write("x"*chunk_size)
-        self.assertEqual([b"abcdef", b"ghi", b"x"*chunk_size], buf._write_stack)
 
 
 class PyTextIOWrapperTest(TextIOWrapperTest):
@@ -3907,7 +3800,7 @@ class MiscIOTest(unittest.TestCase):
         for name in self.io.__all__:
             obj = getattr(self.io, name, None)
             self.assertIsNotNone(obj, name)
-            if name in ("open", "open_code"):
+            if name == "open":
                 continue
             elif "error" in name.lower() or name == "UnsupportedOperation":
                 self.assertTrue(issubclass(obj, Exception), name)
@@ -4176,51 +4069,6 @@ class MiscIOTest(unittest.TestCase):
         # there used to be a buffer overflow in the parser for rawmode
         self.assertRaises(ValueError, self.open, support.TESTFN, 'rwax+')
 
-    def test_check_encoding_errors(self):
-        # bpo-37388: open() and TextIOWrapper must check encoding and errors
-        # arguments in dev mode
-        mod = self.io.__name__
-        filename = __file__
-        invalid = 'Boom, Shaka Laka, Boom!'
-        code = textwrap.dedent(f'''
-            import sys
-            from {mod} import open, TextIOWrapper
-
-            try:
-                open({filename!r}, encoding={invalid!r})
-            except LookupError:
-                pass
-            else:
-                sys.exit(21)
-
-            try:
-                open({filename!r}, errors={invalid!r})
-            except LookupError:
-                pass
-            else:
-                sys.exit(22)
-
-            fp = open({filename!r}, "rb")
-            with fp:
-                try:
-                    TextIOWrapper(fp, encoding={invalid!r})
-                except LookupError:
-                    pass
-                else:
-                    sys.exit(23)
-
-                try:
-                    TextIOWrapper(fp, errors={invalid!r})
-                except LookupError:
-                    pass
-                else:
-                    sys.exit(24)
-
-            sys.exit(10)
-        ''')
-        proc = assert_python_failure('-X', 'dev', '-c', code)
-        self.assertEqual(proc.rc, 10, proc)
-
 
 class CMiscIOTest(MiscIOTest):
     io = io
@@ -4266,8 +4114,7 @@ class CMiscIOTest(MiscIOTest):
         err = res.err.decode()
         if res.rc != 0:
             # Failure: should be a fatal error
-            pattern = (r"Fatal Python error: _enter_buffered_busy: "
-                       r"could not acquire lock "
+            pattern = (r"Fatal Python error: could not acquire lock "
                        r"for <(_io\.)?BufferedWriter name='<{stream_name}>'> "
                        r"at interpreter shutdown, possibly due to "
                        r"daemon threads".format_map(locals()))
@@ -4302,31 +4149,6 @@ class SignalsTest(unittest.TestCase):
         """Check that a partial write, when it gets interrupted, properly
         invokes the signal handler, and bubbles up the exception raised
         in the latter."""
-
-        # XXX This test has three flaws that appear when objects are
-        # XXX not reference counted.
-
-        # - if wio.write() happens to trigger a garbage collection,
-        #   the signal exception may be raised when some __del__
-        #   method is running; it will not reach the assertRaises()
-        #   call.
-
-        # - more subtle, if the wio object is not destroyed at once
-        #   and survives this function, the next opened file is likely
-        #   to have the same fileno (since the file descriptor was
-        #   actively closed).  When wio.__del__ is finally called, it
-        #   will close the other's test file...  To trigger this with
-        #   CPython, try adding "global wio" in this function.
-
-        # - This happens only for streams created by the _pyio module,
-        #   because a wio.close() that fails still consider that the
-        #   file needs to be closed again.  You can try adding an
-        #   "assert wio.closed" at the end of the function.
-
-        # Fortunately, a little gc.collect() seems to be enough to
-        # work around all these issues.
-        support.gc_collect()  # For PyPy or other GCs.
-
         read_results = []
         def _read():
             s = os.read(r, 1)

@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import collections
 import faulthandler
 import functools
 import gc
@@ -13,109 +12,32 @@ import unittest
 
 from test import support
 from test.libregrtest.refleak import dash_R, clear_caches
-from test.libregrtest.cmdline import Namespace
 from test.libregrtest.save_env import saved_test_environment
 from test.libregrtest.utils import format_duration, print_warning
 
 
-class TestResult:
-    def __init__(
-        self,
-        name: str,
-        duration_sec: float = 0.0,
-        xml_data: list[str] | None = None,
-    ) -> None:
-        self.name = name
-        self.duration_sec = duration_sec
-        self.xml_data = xml_data
+# Test result constants.
+PASSED = 1
+FAILED = 0
+ENV_CHANGED = -1
+SKIPPED = -2
+RESOURCE_DENIED = -3
+INTERRUPTED = -4
+CHILD_ERROR = -5   # error in a child process
+TEST_DID_NOT_RUN = -6
+TIMEOUT = -7
 
-    def __str__(self) -> str:
-        return f"{self.name} finished"
-
-
-class Passed(TestResult):
-    def __str__(self) -> str:
-        return f"{self.name} passed"
-
-
-class Failed(TestResult):
-    def __init__(
-        self,
-        name: str,
-        duration_sec: float = 0.0,
-        xml_data: list[str] | None = None,
-        errors: list[tuple[str, str]] | None = None,
-        failures: list[tuple[str, str]] | None = None,
-    ) -> None:
-        super().__init__(name, duration_sec=duration_sec, xml_data=xml_data)
-        self.errors = errors
-        self.failures = failures
-
-    def __str__(self) -> str:
-        if self.errors and self.failures:
-            le = len(self.errors)
-            lf = len(self.failures)
-            error_s = "error" + ("s" if le > 1 else "")
-            failure_s = "failure" + ("s" if lf > 1 else "")
-            return f"{self.name} failed ({le} {error_s}, {lf} {failure_s})"
-
-        if self.errors:
-            le = len(self.errors)
-            error_s = "error" + ("s" if le > 1 else "")
-            return f"{self.name} failed ({le} {error_s})"
-
-        if self.failures:
-            lf = len(self.failures)
-            failure_s = "failure" + ("s" if lf > 1 else "")
-            return f"{self.name} failed ({lf} {failure_s})"
-
-        return f"{self.name} failed"
-
-
-class UncaughtException(Failed):
-    def __str__(self) -> str:
-        return f"{self.name} failed (uncaught exception)"
-
-
-class EnvChanged(Failed):
-    def __str__(self) -> str:
-        return f"{self.name} failed (env changed)"
-
-
-class RefLeak(Failed):
-    def __str__(self) -> str:
-        return f"{self.name} failed (reference leak)"
-
-
-class Skipped(TestResult):
-    def __str__(self) -> str:
-        return f"{self.name} skipped"
-
-
-class ResourceDenied(Skipped):
-    def __str__(self) -> str:
-        return f"{self.name} skipped (resource denied)"
-
-
-class Interrupted(TestResult):
-    def __str__(self) -> str:
-        return f"{self.name} interrupted"
-
-
-class ChildError(Failed):
-    def __str__(self) -> str:
-        return f"{self.name} crashed"
-
-
-class DidNotRun(TestResult):
-    def __str__(self) -> str:
-        return f"{self.name} ran no tests"
-
-
-class Timeout(Failed):
-    def __str__(self) -> str:
-        return f"{self.name} timed out ({format_duration(self.duration_sec)})"
-
+_FORMAT_TEST_RESULT = {
+    PASSED: '%s passed',
+    FAILED: '%s failed',
+    ENV_CHANGED: '%s failed (env changed)',
+    SKIPPED: '%s skipped',
+    RESOURCE_DENIED: '%s skipped (resource denied)',
+    INTERRUPTED: '%s interrupted',
+    CHILD_ERROR: '%s crashed',
+    TEST_DID_NOT_RUN: '%s run no tests',
+    TIMEOUT: '%s timed out',
+}
 
 # Minimum duration of a test to display its duration or to mention that
 # the test is running in background
@@ -144,10 +66,21 @@ NOTTESTS = set()
 FOUND_GARBAGE = []
 
 
-def is_failed(result: TestResult, ns: Namespace) -> bool:
-    if isinstance(result, EnvChanged):
+def is_failed(result, ns):
+    ok = result.result
+    if ok in (PASSED, RESOURCE_DENIED, SKIPPED, TEST_DID_NOT_RUN):
+        return False
+    if ok == ENV_CHANGED:
         return ns.fail_env_changed
-    return isinstance(result, Failed)
+    return True
+
+
+def format_test_result(result):
+    fmt = _FORMAT_TEST_RESULT.get(result.result, "%s")
+    text = fmt % result.test_name
+    if result.result == TIMEOUT:
+        text = '%s (%s)' % (text, format_duration(result.test_time))
+    return text
 
 
 def findtestdir(path=None):
@@ -167,7 +100,7 @@ def findtests(testdir=None, stdtests=STDTESTS, nottests=NOTTESTS):
     return stdtests + sorted(tests)
 
 
-def get_abs_module(ns: Namespace, test_name: str) -> str:
+def get_abs_module(ns, test_name):
     if test_name.startswith('test.') or ns.testdir:
         return test_name
     else:
@@ -175,7 +108,10 @@ def get_abs_module(ns: Namespace, test_name: str) -> str:
         return 'test.' + test_name
 
 
-def _runtest(ns: Namespace, test_name: str) -> TestResult:
+TestResult = collections.namedtuple('TestResult',
+    'test_name result test_time xml_data')
+
+def _runtest(ns, test_name):
     # Handle faulthandler timeout, capture stdout+stderr, XML serialization
     # and measure time.
 
@@ -203,7 +139,7 @@ def _runtest(ns: Namespace, test_name: str) -> TestResult:
                 sys.stderr = stream
                 result = _runtest_inner(ns, test_name,
                                         display_failure=False)
-                if not isinstance(result, Passed):
+                if result != PASSED:
                     output = stream.getvalue()
                     orig_stderr.write(output)
                     orig_stderr.flush()
@@ -219,26 +155,36 @@ def _runtest(ns: Namespace, test_name: str) -> TestResult:
 
         if xml_list:
             import xml.etree.ElementTree as ET
-            result.xml_data = [
-                ET.tostring(x).decode('us-ascii')
-                for x in xml_list
-            ]
+            xml_data = [ET.tostring(x).decode('us-ascii') for x in xml_list]
+        else:
+            xml_data = None
 
-        result.duration_sec = time.perf_counter() - start_time
-        return result
+        test_time = time.perf_counter() - start_time
+
+        return TestResult(test_name, result, test_time, xml_data)
     finally:
         if use_timeout:
             faulthandler.cancel_dump_traceback_later()
         support.junit_xml_list = None
 
 
-def runtest(ns: Namespace, test_name: str) -> TestResult:
+def runtest(ns, test_name):
     """Run a single test.
 
     ns -- regrtest namespace of options
     test_name -- the name of the test
 
-    Returns a TestResult sub-class depending on the kind of result received.
+    Returns the tuple (result, test_time, xml_data), where result is one
+    of the constants:
+
+        INTERRUPTED      KeyboardInterrupt
+        RESOURCE_DENIED  test skipped because resource denied
+        SKIPPED          test skipped for some other reason
+        ENV_CHANGED      test failed because it changed the execution environment
+        FAILED           test failed
+        PASSED           test passed
+        EMPTY_TEST_SUITE test ran no subtests.
+        TIMEOUT          test timed out.
 
     If ns.xmlpath is not None, xml_data is a list containing each
     generated testsuite element.
@@ -250,7 +196,7 @@ def runtest(ns: Namespace, test_name: str) -> TestResult:
             msg = traceback.format_exc()
             print(f"test {test_name} crashed -- {msg}",
                   file=sys.stderr, flush=True)
-        return Failed(test_name)
+        return TestResult(test_name, FAILED, 0.0, None)
 
 
 def _test_module(the_module):
@@ -263,7 +209,7 @@ def _test_module(the_module):
     support.run_unittest(tests)
 
 
-def _runtest_inner2(ns: Namespace, test_name: str) -> bool:
+def _runtest_inner2(ns, test_name):
     # Load the test function, run the test function, handle huntrleaks
     # and findleaks to detect leaks
 
@@ -307,9 +253,7 @@ def _runtest_inner2(ns: Namespace, test_name: str) -> bool:
     return refleak
 
 
-def _runtest_inner(
-    ns: Namespace, test_name: str, display_failure: bool = True
-) -> TestResult:
+def _runtest_inner(ns, test_name, display_failure=True):
     # Detect environment changes, handle exceptions.
 
     # Reset the environment_altered flag to detect if a test altered
@@ -327,43 +271,37 @@ def _runtest_inner(
     except support.ResourceDenied as msg:
         if not ns.quiet and not ns.pgo:
             print(f"{test_name} skipped -- {msg}", flush=True)
-        return ResourceDenied(test_name)
+        return RESOURCE_DENIED
     except unittest.SkipTest as msg:
         if not ns.quiet and not ns.pgo:
             print(f"{test_name} skipped -- {msg}", flush=True)
-        return Skipped(test_name)
-    except support.TestFailedWithDetails as exc:
-        msg = f"test {test_name} failed"
-        if display_failure:
-            msg = f"{msg} -- {exc}"
-        print(msg, file=sys.stderr, flush=True)
-        return Failed(test_name, errors=exc.errors, failures=exc.failures)
+        return SKIPPED
     except support.TestFailed as exc:
         msg = f"test {test_name} failed"
         if display_failure:
             msg = f"{msg} -- {exc}"
         print(msg, file=sys.stderr, flush=True)
-        return Failed(test_name)
+        return FAILED
     except support.TestDidNotRun:
-        return DidNotRun(test_name)
+        return TEST_DID_NOT_RUN
     except KeyboardInterrupt:
         print()
-        return Interrupted(test_name)
+        return INTERRUPTED
     except:
         if not ns.pgo:
             msg = traceback.format_exc()
             print(f"test {test_name} crashed -- {msg}",
                   file=sys.stderr, flush=True)
-        return UncaughtException(test_name)
+        return FAILED
 
     if refleak:
-        return RefLeak(test_name)
+        return FAILED
     if environment.changed:
-        return EnvChanged(test_name)
-    return Passed(test_name)
+        return ENV_CHANGED
+    return PASSED
 
 
-def cleanup_test_droppings(test_name: str, verbose: int) -> None:
+def cleanup_test_droppings(test_name, verbose):
     # First kill any dangling references to open files etc.
     # This can also issue some ResourceWarnings which would otherwise get
     # triggered during the following test run, and possibly produce failures.
@@ -389,7 +327,7 @@ def cleanup_test_droppings(test_name: str, verbose: int) -> None:
                                f"directory nor file")
 
         if verbose:
-            print_warning(f"{test_name} left behind {kind} {name!r}")
+            print_warning("%r left behind %s %r" % (test_name, kind, name))
             support.environment_altered = True
 
         try:

@@ -541,17 +541,6 @@ alternative there, as well as adapting the above script to use your alternative
 serialization.
 
 
-Running a logging socket listener in production
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To run a logging listener in production, you may need to use a process-management tool
-such as `Supervisor <http://supervisord.org/>`_. `Here
-<https://gist.github.com/vsajip/4b227eeec43817465ca835ca66f75e2b>`_ is a Gist which
-provides the bare-bones files to run the above functionality using Supervisor: you
-will need to change the `/path/to/` parts in the Gist to reflect the actual paths you
-want to use.
-
-
 .. _context-info:
 
 Adding contextual information to your logging output
@@ -590,7 +579,7 @@ information. When you call one of the logging methods on an instance of
 information in the delegated call. Here's a snippet from the code of
 :class:`LoggerAdapter`::
 
-    def debug(self, msg, /, *args, **kwargs):
+    def debug(self, msg, *args, **kwargs):
         """
         Delegate a debug call to the underlying logger, after adding
         contextual information from this adapter instance.
@@ -732,8 +721,9 @@ existing processes to perform this function.)
 includes a working socket receiver which can be used as a starting point for you
 to adapt in your own applications.
 
-You could also write your own handler which uses the :class:`~multiprocessing.Lock`
-class from the :mod:`multiprocessing` module to serialize access to the
+If you are using a recent version of Python which includes the
+:mod:`multiprocessing` module, you could write your own handler which uses the
+:class:`~multiprocessing.Lock` class from this module to serialize access to the
 file from your processes. The existing :class:`FileHandler` and subclasses do
 not make use of :mod:`multiprocessing` at present, though they may do so in the
 future. Note that at present, the :mod:`multiprocessing` module does not provide
@@ -993,17 +983,6 @@ to this (remembering to first import :mod:`concurrent.futures`)::
         for i in range(10):
             executor.submit(worker_process, queue, worker_configurer)
 
-Deploying Web applications using Gunicorn and uWSGI
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-When deploying Web applications using `Gunicorn <https://gunicorn.org/>`_ or `uWSGI
-<https://uwsgi-docs.readthedocs.io/en/latest/>`_ (or similar), multiple worker
-processes are created to handle client requests. In such environments, avoid creating
-file-based handlers directly in your web application. Instead, use a
-:class:`SocketHandler` to log from the web application to a listener in a separate
-process. This can be set up using a process management tool such as Supervisor - see
-`Running a logging socket listener in production`_ for more details.
-
 
 Using file rotation
 -------------------
@@ -1136,7 +1115,7 @@ call ``str()`` on that object to get the actual format string. Consider the
 following two classes::
 
     class BraceMessage:
-        def __init__(self, fmt, /, *args, **kwargs):
+        def __init__(self, fmt, *args, **kwargs):
             self.fmt = fmt
             self.args = args
             self.kwargs = kwargs
@@ -1145,7 +1124,7 @@ following two classes::
             return self.fmt.format(*self.args, **self.kwargs)
 
     class DollarMessage:
-        def __init__(self, fmt, /, **kwargs):
+        def __init__(self, fmt, **kwargs):
             self.fmt = fmt
             self.kwargs = kwargs
 
@@ -1200,7 +1179,7 @@ to the above, as in the following example::
 
     import logging
 
-    class Message:
+    class Message(object):
         def __init__(self, fmt, args):
             self.fmt = fmt
             self.args = args
@@ -1210,9 +1189,9 @@ to the above, as in the following example::
 
     class StyleAdapter(logging.LoggerAdapter):
         def __init__(self, logger, extra=None):
-            super().__init__(logger, extra or {})
+            super(StyleAdapter, self).__init__(logger, extra or {})
 
-        def log(self, level, msg, /, *args, **kwargs):
+        def log(self, level, msg, *args, **kwargs):
             if self.isEnabledFor(level):
                 msg, kwargs = self.process(msg, kwargs)
                 self.logger._log(level, Message(msg, args), (), **kwargs)
@@ -1358,7 +1337,7 @@ You can also subclass :class:`QueueListener` to get messages from other kinds
 of queues, for example a ZeroMQ 'subscribe' socket. Here's an example::
 
     class ZeroMQSocketListener(QueueListener):
-        def __init__(self, uri, /, *handlers, **kwargs):
+        def __init__(self, uri, *handlers, **kwargs):
             self.ctx = kwargs.get('ctx') or zmq.Context()
             socket = zmq.Socket(self.ctx, zmq.SUB)
             socket.setsockopt_string(zmq.SUBSCRIBE, '')  # subscribe to everything
@@ -1390,7 +1369,7 @@ An example dictionary-based configuration
 -----------------------------------------
 
 Below is an example of a logging configuration dictionary - it's taken from
-the `documentation on the Django project <https://docs.djangoproject.com/en/stable/topics/logging/#configuring-logging>`_.
+the `documentation on the Django project <https://docs.djangoproject.com/en/1.9/topics/logging/#configuring-logging>`_.
 This dictionary is passed to :func:`~config.dictConfig` to put the configuration into effect::
 
     LOGGING = {
@@ -1446,7 +1425,7 @@ This dictionary is passed to :func:`~config.dictConfig` to put the configuration
     }
 
 For more information about this configuration, you can see the `relevant
-section <https://docs.djangoproject.com/en/stable/topics/logging/#configuring-logging>`_
+section <https://docs.djangoproject.com/en/1.9/topics/logging/#configuring-logging>`_
 of the Django documentation.
 
 .. _cookbook-rotator-namer:
@@ -1512,18 +1491,12 @@ works::
         which then get dispatched, by the logging system, to the handlers
         configured for those loggers.
         """
-
         def handle(self, record):
-            if record.name == "root":
-                logger = logging.getLogger()
-            else:
-                logger = logging.getLogger(record.name)
-
-            if logger.isEnabledFor(record.levelno):
-                # The process name is transformed just to show that it's the listener
-                # doing the logging to files and console
-                record.processName = '%s (for %s)' % (current_process().name, record.processName)
-                logger.handle(record)
+            logger = logging.getLogger(record.name)
+            # The process name is transformed just to show that it's the listener
+            # doing the logging to files and console
+            record.processName = '%s (for %s)' % (current_process().name, record.processName)
+            logger.handle(record)
 
     def listener_process(q, stop_event, config):
         """
@@ -1588,16 +1561,22 @@ works::
         # The main process gets a simple configuration which prints to the console.
         config_initial = {
             'version': 1,
+            'formatters': {
+                'detailed': {
+                    'class': 'logging.Formatter',
+                    'format': '%(asctime)s %(name)-15s %(levelname)-8s %(processName)-10s %(message)s'
+                }
+            },
             'handlers': {
                 'console': {
                     'class': 'logging.StreamHandler',
-                    'level': 'INFO'
-                }
+                    'level': 'INFO',
+                },
             },
             'root': {
-                'handlers': ['console'],
-                'level': 'DEBUG'
-            }
+                'level': 'DEBUG',
+                'handlers': ['console']
+            },
         }
         # The worker process configuration is just a QueueHandler attached to the
         # root logger, which allows all messages to be sent to the queue.
@@ -1610,13 +1589,13 @@ works::
             'handlers': {
                 'queue': {
                     'class': 'logging.handlers.QueueHandler',
-                    'queue': q
-                }
+                    'queue': q,
+                },
             },
             'root': {
-                'handlers': ['queue'],
-                'level': 'DEBUG'
-            }
+                'level': 'DEBUG',
+                'handlers': ['queue']
+            },
         }
         # The listener process configuration shows that the full flexibility of
         # logging configuration is available to dispatch events to handlers however
@@ -1640,28 +1619,28 @@ works::
             'handlers': {
                 'console': {
                     'class': 'logging.StreamHandler',
+                    'level': 'INFO',
                     'formatter': 'simple',
-                    'level': 'INFO'
                 },
                 'file': {
                     'class': 'logging.FileHandler',
                     'filename': 'mplog.log',
                     'mode': 'w',
-                    'formatter': 'detailed'
+                    'formatter': 'detailed',
                 },
                 'foofile': {
                     'class': 'logging.FileHandler',
                     'filename': 'mplog-foo.log',
                     'mode': 'w',
-                    'formatter': 'detailed'
+                    'formatter': 'detailed',
                 },
                 'errors': {
                     'class': 'logging.FileHandler',
                     'filename': 'mplog-errors.log',
                     'mode': 'w',
+                    'level': 'ERROR',
                     'formatter': 'detailed',
-                    'level': 'ERROR'
-                }
+                },
             },
             'loggers': {
                 'foo': {
@@ -1669,9 +1648,9 @@ works::
                 }
             },
             'root': {
-                'handlers': ['console', 'file', 'errors'],
-                'level': 'DEBUG'
-            }
+                'level': 'DEBUG',
+                'handlers': ['console', 'file', 'errors']
+            },
         }
         # Log some initial events, just to show that logging in the parent works
         # normally.
@@ -1763,8 +1742,8 @@ which uses JSON to serialise the event in a machine-parseable manner::
     import json
     import logging
 
-    class StructuredMessage:
-        def __init__(self, message, /, **kwargs):
+    class StructuredMessage(object):
+        def __init__(self, message, **kwargs):
             self.message = message
             self.kwargs = kwargs
 
@@ -1805,10 +1784,10 @@ as in the following complete example::
                 return tuple(o)
             elif isinstance(o, unicode):
                 return o.encode('unicode_escape').decode('ascii')
-            return super().default(o)
+            return super(Encoder, self).default(o)
 
-    class StructuredMessage:
-        def __init__(self, message, /, **kwargs):
+    class StructuredMessage(object):
+        def __init__(self, message, **kwargs):
             self.message = message
             self.kwargs = kwargs
 
@@ -2039,8 +2018,8 @@ object as a message format string, and that the logging package will call
 :func:`str` on that object to get the actual format string. Consider the
 following two classes::
 
-    class BraceMessage:
-        def __init__(self, fmt, /, *args, **kwargs):
+    class BraceMessage(object):
+        def __init__(self, fmt, *args, **kwargs):
             self.fmt = fmt
             self.args = args
             self.kwargs = kwargs
@@ -2048,8 +2027,8 @@ following two classes::
         def __str__(self):
             return self.fmt.format(*self.args, **self.kwargs)
 
-    class DollarMessage:
-        def __init__(self, fmt, /, **kwargs):
+    class DollarMessage(object):
+        def __init__(self, fmt, **kwargs):
             self.fmt = fmt
             self.kwargs = kwargs
 
@@ -2197,11 +2176,11 @@ class, as shown in the following example::
             """
             Format an exception so that it prints on a single line.
             """
-            result = super().formatException(exc_info)
+            result = super(OneLineExceptionFormatter, self).formatException(exc_info)
             return repr(result)  # or format into one line however you want to
 
         def format(self, record):
-            s = super().format(record)
+            s = super(OneLineExceptionFormatter, self).format(record)
             if record.exc_text:
                 s = s.replace('\n', '') + '|'
             return s
@@ -2514,7 +2493,7 @@ scope of the context manager::
     import logging
     import sys
 
-    class LoggingContext:
+    class LoggingContext(object):
         def __init__(self, logger, level=None, handler=None, close=True):
             self.logger = logger
             self.level = level
@@ -2835,7 +2814,7 @@ refer to the comments in the code snippet for more detailed information.
     #
     class QtHandler(logging.Handler):
         def __init__(self, slotfunc, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+            super(QtHandler, self).__init__(*args, **kwargs)
             self.signaller = Signaller()
             self.signaller.signal.connect(slotfunc)
 
@@ -2905,7 +2884,7 @@ refer to the comments in the code snippet for more detailed information.
         }
 
         def __init__(self, app):
-            super().__init__()
+            super(Window, self).__init__()
             self.app = app
             self.textedit = te = QtWidgets.QPlainTextEdit(self)
             # Set whatever the default monospace font is for the platform
@@ -3001,82 +2980,3 @@ refer to the comments in the code snippet for more detailed information.
 
     if __name__=='__main__':
         main()
-
-
-.. patterns-to-avoid:
-
-Patterns to avoid
------------------
-
-Although the preceding sections have described ways of doing things you might
-need to do or deal with, it is worth mentioning some usage patterns which are
-*unhelpful*, and which should therefore be avoided in most cases. The following
-sections are in no particular order.
-
-
-Opening the same log file multiple times
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-On Windows, you will generally not be able to open the same file multiple times
-as this will lead to a "file is in use by another process" error. However, on
-POSIX platforms you'll not get any errors if you open the same file multiple
-times. This could be done accidentally, for example by:
-
-* Adding a file handler more than once which references the same file (e.g. by
-  a copy/paste/forget-to-change error).
-
-* Opening two files that look different, as they have different names, but are
-  the same because one is a symbolic link to the other.
-
-* Forking a process, following which both parent and child have a reference to
-  the same file. This might be through use of the :mod:`multiprocessing` module,
-  for example.
-
-Opening a file multiple times might *appear* to work most of the time, but can
-lead to a number of problems in practice:
-
-* Logging output can be garbled because multiple threads or processes try to
-  write to the same file. Although logging guards against concurrent use of the
-  same handler instance by multiple threads, there is no such protection if
-  concurrent writes are attempted by two different threads using two different
-  handler instances which happen to point to the same file.
-
-* An attempt to delete a file (e.g. during file rotation) silently fails,
-  because there is another reference pointing to it. This can lead to confusion
-  and wasted debugging time - log entries end up in unexpected places, or are
-  lost altogether.
-
-Use the techniques outlined in :ref:`multiple-processes` to circumvent such
-issues.
-
-Using loggers as attributes in a class or passing them as parameters
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-While there might be unusual cases where you'll need to do this, in general
-there is no point because loggers are singletons. Code can always access a
-given logger instance by name using ``logging.getLogger(name)``, so passing
-instances around and holding them as instance attributes is pointless. Note
-that in other languages such as Java and C#, loggers are often static class
-attributes. However, this pattern doesn't make sense in Python, where the
-module (and not the class) is the unit of software decomposition.
-
-
-Adding handlers other than :class:`NullHandler` to a logger in a library
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Configuring logging by adding handlers, formatters and filters is the
-responsibility of the application developer, not the library developer. If you
-are maintaining a library, ensure that you don't add handlers to any of your
-loggers other than a :class:`~logging.NullHandler` instance.
-
-
-Creating a lot of loggers
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Loggers are singletons that are never freed during a script execution, and so
-creating lots of loggers will use up memory which can't then be freed. Rather
-than create a logger per e.g. file processed or network connection made, use
-the :ref:`existing mechanisms <context-info>` for passing contextual
-information into your logs and restrict the loggers created to those describing
-areas within your application (generally modules, but occasionally slightly
-more fine-grained than that).

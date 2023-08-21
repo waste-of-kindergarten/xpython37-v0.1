@@ -423,10 +423,10 @@ The :mod:`locale` module defines the following exception and functions:
     .. versionadded:: 3.5
 
 
-.. function:: atof(string, func=float)
+.. function:: atof(string)
 
-   Converts a string to a number, following the :const:`LC_NUMERIC` settings,
-   by calling *func* on the result of calling :func:`delocalize` on *string*.
+   Converts a string to a floating point number, following the :const:`LC_NUMERIC`
+   settings.
 
 
 .. function:: atoi(string)

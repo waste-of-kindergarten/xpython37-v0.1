@@ -1,3 +1,5 @@
+:keepdoctest:
+
 :mod:`doctest` --- Test interactive Python examples
 ===================================================
 

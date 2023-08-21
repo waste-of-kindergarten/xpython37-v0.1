@@ -114,8 +114,8 @@ accessible.  "Directly accessible" here means that an unqualified reference to a
 name attempts to find the name in the namespace.
 
 Although scopes are determined statically, they are used dynamically. At any
-time during execution, there are 3 or 4 nested scopes whose namespaces are
-directly accessible:
+time during execution, there are at least three nested scopes whose namespaces
+are directly accessible:
 
 * the innermost scope, which is searched first, contains the local names
 * the scopes of any enclosing functions, which are searched starting with the
@@ -475,20 +475,12 @@ Random Remarks
 
 .. These should perhaps be placed more carefully...
 
-If the same attribute name occurs in both an instance and in a class,
-then attribute lookup prioritizes the instance::
-
-    >>> class Warehouse:
-            purpose = 'storage'
-            region = 'west'
-
-    >>> w1 = Warehouse()
-    >>> print(w1.purpose, w1.region)
-    storage west
-    >>> w2 = Warehouse()
-    >>> w2.region = 'east'
-    >>> print(w2.purpose, w2.region)
-    storage east
+Data attributes override method attributes with the same name; to avoid
+accidental name conflicts, which may cause hard-to-find bugs in large programs,
+it is wise to use some kind of convention that minimizes the chance of
+conflicts.  Possible conventions include capitalizing method names, prefixing
+data attribute names with a small unique string (perhaps just an underscore), or
+using verbs for methods and nouns for data attributes.
 
 Data attributes may be referenced by methods as well as by ordinary users
 ("clients") of an object.  In other words, classes are not usable to implement
@@ -797,7 +789,7 @@ using the :func:`next` built-in function; this example shows how it all works::
    >>> s = 'abc'
    >>> it = iter(s)
    >>> it
-   <str_iterator object at 0x10c90e650>
+   <iterator object at 0x00A1DB50>
    >>> next(it)
    'a'
    >>> next(it)
@@ -849,7 +841,7 @@ defines :meth:`__next__`, then :meth:`__iter__` can just return ``self``::
 Generators
 ==========
 
-:term:`Generators <generator>` are a simple and powerful tool for creating iterators.  They
+:term:`Generator`\s are a simple and powerful tool for creating iterators.  They
 are written like regular functions but use the :keyword:`yield` statement
 whenever they want to return data.  Each time :func:`next` is called on it, the
 generator resumes where it left off (it remembers all the data values and which
@@ -908,7 +900,10 @@ Examples::
    >>> sum(x*y for x,y in zip(xvec, yvec))         # dot product
    260
 
-   >>> unique_words = set(word for line in page  for word in line.split())
+   >>> from math import pi, sin
+   >>> sine_table = {x: sin(x*pi/180) for x in range(0, 91)}
+
+   >>> unique_words = set(word  for line in page  for word in line.split())
 
    >>> valedictorian = max((student.gpa, student.name) for student in graduates)
 

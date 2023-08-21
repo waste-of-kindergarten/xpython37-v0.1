@@ -6,7 +6,6 @@ import signal
 import socket
 import sys
 from test import support
-from test.support import socket_helper
 from time import sleep
 import unittest
 import unittest.mock
@@ -23,7 +22,7 @@ if hasattr(socket, 'socketpair'):
 else:
     def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
         with socket.socket(family, type, proto) as l:
-            l.bind((socket_helper.HOST, 0))
+            l.bind((support.HOST, 0))
             l.listen()
             c = socket.socket(family, type, proto)
             try:
@@ -48,7 +47,7 @@ def find_ready_matching(ready, flag):
     return match
 
 
-class BaseSelectorTestCase:
+class BaseSelectorTestCase(unittest.TestCase):
 
     def make_socketpair(self):
         rd, wr = socketpair()
@@ -492,28 +491,26 @@ class ScalableSelectorMixIn:
         self.assertEqual(NUM_FDS // 2, len(fds))
 
 
-class DefaultSelectorTestCase(BaseSelectorTestCase, unittest.TestCase):
+class DefaultSelectorTestCase(BaseSelectorTestCase):
 
     SELECTOR = selectors.DefaultSelector
 
 
-class SelectSelectorTestCase(BaseSelectorTestCase, unittest.TestCase):
+class SelectSelectorTestCase(BaseSelectorTestCase):
 
     SELECTOR = selectors.SelectSelector
 
 
 @unittest.skipUnless(hasattr(selectors, 'PollSelector'),
                      "Test needs selectors.PollSelector")
-class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
-                           unittest.TestCase):
+class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'PollSelector', None)
 
 
 @unittest.skipUnless(hasattr(selectors, 'EpollSelector'),
                      "Test needs selectors.EpollSelector")
-class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
-                            unittest.TestCase):
+class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'EpollSelector', None)
 
@@ -530,8 +527,7 @@ class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
 
 @unittest.skipUnless(hasattr(selectors, 'KqueueSelector'),
                      "Test needs selectors.KqueueSelector)")
-class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
-                             unittest.TestCase):
+class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'KqueueSelector', None)
 
@@ -547,31 +543,22 @@ class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
         with self.assertRaises(KeyError):
             s.get_key(bad_f)
 
-    def test_empty_select_timeout(self):
-        # Issues #23009, #29255: Make sure timeout is applied when no fds
-        # are registered.
-        s = self.SELECTOR()
-        self.addCleanup(s.close)
-
-        t0 = time()
-        self.assertEqual(s.select(1), [])
-        t1 = time()
-        dt = t1 - t0
-        # Tolerate 2.0 seconds for very slow buildbots
-        self.assertTrue(0.8 <= dt <= 2.0, dt)
-
 
 @unittest.skipUnless(hasattr(selectors, 'DevpollSelector'),
                      "Test needs selectors.DevpollSelector")
-class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
-                              unittest.TestCase):
+class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'DevpollSelector', None)
 
 
-def tearDownModule():
+
+def test_main():
+    tests = [DefaultSelectorTestCase, SelectSelectorTestCase,
+             PollSelectorTestCase, EpollSelectorTestCase,
+             KqueueSelectorTestCase, DevpollSelectorTestCase]
+    support.run_unittest(*tests)
     support.reap_children()
 
 
 if __name__ == "__main__":
-    unittest.main()
+    test_main()

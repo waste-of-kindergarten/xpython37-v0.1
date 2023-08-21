@@ -93,7 +93,6 @@ import modulefinder
 import getopt
 import os
 import sys
-import sysconfig
 
 
 # Import the freeze-private modules
@@ -125,7 +124,7 @@ def main():
 
     # default the exclude list for each platform
     if win: exclude = exclude + [
-        'dos', 'dospath', 'mac', 'macfs', 'MACFS', 'posix', ]
+        'dos', 'dospath', 'mac', 'macpath', 'macfs', 'MACFS', 'posix', ]
 
     fail_import = exclude[:]
 
@@ -143,8 +142,7 @@ def main():
         # last option can not be "-i", so this ensures "pos+1" is in range!
         if sys.argv[pos] == '-i':
             try:
-                with open(sys.argv[pos+1]) as infp:
-                    options = infp.read().split()
+                options = open(sys.argv[pos+1]).read().split()
             except IOError as why:
                 usage("File name '%s' specified with the -i option "
                       "can not be read - %s" % (sys.argv[pos+1], why) )
@@ -227,7 +225,7 @@ def main():
         extensions_c = 'frozen_extensions.c'
     if ishome:
         print("(Using Python source directory)")
-        configdir = exec_prefix
+        binlib = exec_prefix
         incldir = os.path.join(prefix, 'Include')
         config_h_dir = exec_prefix
         config_c_in = os.path.join(prefix, 'Modules', 'config.c.in')
@@ -236,21 +234,22 @@ def main():
         if win:
             frozendllmain_c = os.path.join(exec_prefix, 'Pc\\frozen_dllmain.c')
     else:
-        configdir = sysconfig.get_config_var('LIBPL')
+        binlib = os.path.join(exec_prefix,
+                              'lib', 'python%s' % version,
+                              'config-%s' % flagged_version)
         incldir = os.path.join(prefix, 'include', 'python%s' % flagged_version)
         config_h_dir = os.path.join(exec_prefix, 'include',
                                     'python%s' % flagged_version)
-        config_c_in = os.path.join(configdir, 'config.c.in')
-        frozenmain_c = os.path.join(configdir, 'frozenmain.c')
-        makefile_in = os.path.join(configdir, 'Makefile')
-        frozendllmain_c = os.path.join(configdir, 'frozen_dllmain.c')
-    libdir = sysconfig.get_config_var('LIBDIR')
+        config_c_in = os.path.join(binlib, 'config.c.in')
+        frozenmain_c = os.path.join(binlib, 'frozenmain.c')
+        makefile_in = os.path.join(binlib, 'Makefile')
+        frozendllmain_c = os.path.join(binlib, 'frozen_dllmain.c')
     supp_sources = []
     defines = []
     includes = ['-I' + incldir, '-I' + config_h_dir]
 
     # sanity check of directories and files
-    check_dirs = [prefix, exec_prefix, configdir, incldir]
+    check_dirs = [prefix, exec_prefix, binlib, incldir]
     if not win:
         # These are not directories on Windows.
         check_dirs = check_dirs + extensions
@@ -457,7 +456,7 @@ def main():
 
     cflags = ['$(OPT)']
     cppflags = defines + includes
-    libs = [os.path.join(libdir, '$(LDLIBRARY)')]
+    libs = [os.path.join(binlib, '$(LDLIBRARY)')]
 
     somevars = {}
     if os.path.exists(makefile_in):

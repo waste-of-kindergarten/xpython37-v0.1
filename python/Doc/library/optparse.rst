@@ -55,7 +55,7 @@ equivalent to the above example::
    <yourscript> -q -foutfile
    <yourscript> -qfoutfile
 
-Additionally, users can run one of the following ::
+Additionally, users can run one of  ::
 
    <yourscript> -h
    <yourscript> --help
@@ -131,7 +131,7 @@ option
    These option syntaxes are not supported by :mod:`optparse`, and they never
    will be.  This is deliberate: the first three are non-standard on any
    environment, and the last only makes sense if you're exclusively targeting
-   Windows or certain legacy platforms (e.g. VMS, MS-DOS).
+   VMS, MS-DOS, and/or Windows.
 
 option argument
    an argument that follows an option, is closely associated with that option,
@@ -415,7 +415,7 @@ Some other actions supported by :mod:`optparse` are:
 ``"callback"``
    call a specified function
 
-These are covered in section :ref:`optparse-reference-guide`,
+These are covered in section :ref:`optparse-reference-guide`, Reference Guide
 and section :ref:`optparse-option-callbacks`.
 
 

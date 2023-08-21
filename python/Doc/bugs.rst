@@ -25,19 +25,7 @@ docs@python.org (behavioral bugs can be sent to python-list@python.org).
 though it may take a while to be processed.
 
 .. seealso::
-
-   `Documentation bugs`_
-      A list of documentation bugs that have been submitted to the Python issue tracker.
-
-   `Issue Tracking <https://devguide.python.org/tracker/>`_
-      Overview of the process involved in reporting an improvement on the tracker.
-
-   `Helping with Documentation <https://devguide.python.org/docquality/#helping-with-documentation>`_
-      Comprehensive guide for individuals that are interested in contributing to Python documentation.
-
-   `Documentation Translations <https://devguide.python.org/documenting/#translating>`_
-      A list of GitHub pages for documentation translation and their primary contacts.
-
+   `Documentation bugs`_ on the Python issue tracker
 
 .. _using-the-tracker:
 
@@ -84,7 +72,7 @@ taken on the bug.
       Article which goes into some detail about how to create a useful bug report.
       This describes what kind of information is useful and why it is useful.
 
-   `Bug Writing Guidelines <https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html>`_
+   `Bug Report Writing Guidelines <https://developer.mozilla.org/en-US/docs/Mozilla/QA/Bug_writing_guidelines>`_
       Information about writing a good bug report.  Some of this is specific to the
       Mozilla project, but describes general good practices.
 

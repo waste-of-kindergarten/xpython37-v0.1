@@ -1,6 +1,4 @@
-.. highlight:: c
-
-.. _new-types-topics:
+.. highlightlang:: c
 
 *****************************************
 Defining Extension Types: Assorted Topics
@@ -73,19 +71,7 @@ function::
    newdatatype_dealloc(newdatatypeobject *obj)
    {
        free(obj->obj_UnderlyingDatatypePtr);
-       Py_TYPE(obj)->tp_free((PyObject *)obj);
-   }
-
-If your type supports garbage collection, the destructor should call
-:c:func:`PyObject_GC_UnTrack` before clearing any member fields::
-
-   static void
-   newdatatype_dealloc(newdatatypeobject *obj)
-   {
-       PyObject_GC_UnTrack(obj);
-       Py_CLEAR(obj->other_obj);
-       ...
-       Py_TYPE(obj)->tp_free((PyObject *)obj);
+       Py_TYPE(obj)->tp_free(obj);
    }
 
 .. index::
@@ -116,7 +102,7 @@ done.  This can be done using the :c:func:`PyErr_Fetch` and
            /* This saves the current exception state */
            PyErr_Fetch(&err_type, &err_value, &err_traceback);
 
-           cbresult = PyObject_CallNoArgs(self->my_callback);
+           cbresult = PyObject_CallObject(self->my_callback, NULL);
            if (cbresult == NULL)
                PyErr_WriteUnraisable(self->my_callback);
            else
@@ -388,7 +374,7 @@ analogous to the :ref:`rich comparison methods <richcmpfuncs>`, like
 :c:func:`PyObject_RichCompareBool`.
 
 This function is called with two Python objects and the operator as arguments,
-where the operator is one of ``Py_EQ``, ``Py_NE``, ``Py_LE``, ``Py_GE``,
+where the operator is one of ``Py_EQ``, ``Py_NE``, ``Py_LE``, ``Py_GT``,
 ``Py_LT`` or ``Py_GT``.  It should compare the two objects with respect to the
 specified operator and return ``Py_True`` or ``Py_False`` if the comparison is
 successful, ``Py_NotImplemented`` to indicate that comparison is not

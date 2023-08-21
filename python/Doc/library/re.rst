@@ -28,10 +28,7 @@ character for the same purpose in string literals; for example, to match
 a literal backslash, one might have to write ``'\\\\'`` as the pattern
 string, because the regular expression must be ``\\``, and each
 backslash must be expressed as ``\\`` inside a regular Python string
-literal. Also, please note that any invalid escape sequences in Python's
-usage of the backslash in string literals now generate a :exc:`DeprecationWarning`
-and in the future this will become a :exc:`SyntaxError`. This behaviour
-will happen even if it is a valid escape sequence for a regular expression.
+literal.
 
 The solution is to use Python's raw string notation for regular expression
 patterns; backslashes are not handled in any special way in a string literal
@@ -566,13 +563,13 @@ Most of the standard escapes supported by Python string literals are also
 accepted by the regular expression parser::
 
    \a      \b      \f      \n
-   \N      \r      \t      \u
-   \U      \v      \x      \\
+   \r      \t      \u      \U
+   \v      \x      \\
 
 (Note that ``\b`` is used to represent word boundaries, and means "backspace"
 only inside character classes.)
 
-``'\u'``, ``'\U'``, and ``'\N'`` escape sequences are only recognized in Unicode
+``'\u'`` and ``'\U'`` escape sequences are only recognized in Unicode
 patterns.  In bytes patterns they are errors.  Unknown escapes of ASCII
 letters are reserved for future use and treated as errors.
 
@@ -587,9 +584,6 @@ three digits in length.
 .. versionchanged:: 3.6
    Unknown escapes consisting of ``'\'`` and an ASCII letter now are errors.
 
-.. versionchanged:: 3.8
-   The ``'\N{name}'`` escape sequence has been added. As in string literals,
-   it expands to the named Unicode character (e.g. ``'\N{EM DASH}'``).
 
 
 .. _contents-of-module-re:
@@ -824,20 +818,10 @@ form.
 .. function:: findall(pattern, string, flags=0)
 
    Return all non-overlapping matches of *pattern* in *string*, as a list of
-   strings or tuples.  The *string* is scanned left-to-right, and matches
-   are returned in the order found.  Empty matches are included in the result.
-
-   The result depends on the number of capturing groups in the pattern.
-   If there are no groups, return a list of strings matching the whole
-   pattern.  If there is exactly one group, return a list of strings
-   matching that group.  If multiple groups are present, return a list
-   of tuples of strings matching the groups.  Non-capturing groups do not
-   affect the form of the result.
-
-      >>> re.findall(r'\bf[a-z]*', 'which foot or hand fell fastest')
-      ['foot', 'fell', 'fastest']
-      >>> re.findall(r'(\w+)=(\d+)', 'set width=20 and height=10')
-      [('width', '20'), ('height', '10')]
+   strings.  The *string* is scanned left-to-right, and matches are returned in
+   the order found.  If one or more groups are present in the pattern, return a
+   list of groups; this will be a list of tuples if the pattern has more than
+   one group.  Empty matches are included in the result.
 
    .. versionchanged:: 3.7
       Non-empty matches can now start just after a previous empty match.
@@ -941,8 +925,8 @@ form.
    This is useful if you want to match an arbitrary literal string that may
    have regular expression metacharacters in it.  For example::
 
-      >>> print(re.escape('https://www.python.org'))
-      https://www\.python\.org
+      >>> print(re.escape('http://www.python.org'))
+      http://www\.python\.org
 
       >>> legal_chars = string.ascii_lowercase + string.digits + "!#$%&'*+-.^_`|~:"
       >>> print('[%s]+' % re.escape(legal_chars))
@@ -1352,7 +1336,9 @@ Checking for a Pair
 ^^^^^^^^^^^^^^^^^^^
 
 In this example, we'll use the following helper function to display match
-objects a little more gracefully::
+objects a little more gracefully:
+
+.. testcode::
 
    def displaymatch(match):
        if match is None:
@@ -1385,9 +1371,10 @@ To match this with a regular expression, one could use backreferences as such::
    "<Match: '354aa', groups=('a',)>"
 
 To find out what card the pair consists of, one could use the
-:meth:`~Match.group` method of the match object in the following manner::
+:meth:`~Match.group` method of the match object in the following manner:
 
-   >>> pair = re.compile(r".*(.).*\1")
+.. doctest::
+
    >>> pair.match("717ak").group(1)
    '7'
 
@@ -1492,9 +1479,7 @@ easily read and modified by Python as demonstrated in the following example that
 creates a phonebook.
 
 First, here is the input.  Normally it may come from a file, here we are using
-triple-quoted string syntax
-
-.. doctest::
+triple-quoted string syntax::
 
    >>> text = """Ross McFluff: 834.345.1254 155 Elm Street
    ...
@@ -1572,7 +1557,7 @@ find all of the adverbs in some text, they might use :func:`findall` in
 the following manner::
 
    >>> text = "He was carefully disguised but captured quickly by police."
-   >>> re.findall(r"\w+ly\b", text)
+   >>> re.findall(r"\w+ly", text)
    ['carefully', 'quickly']
 
 
@@ -1586,7 +1571,7 @@ a writer wanted to find all of the adverbs *and their positions* in
 some text, they would use :func:`finditer` in the following manner::
 
    >>> text = "He was carefully disguised but captured quickly by police."
-   >>> for m in re.finditer(r"\w+ly\b", text):
+   >>> for m in re.finditer(r"\w+ly", text):
    ...     print('%02d-%02d: %s' % (m.start(), m.end(), m.group(0)))
    07-16: carefully
    40-47: quickly
@@ -1627,14 +1612,10 @@ The text categories are specified with regular expressions.  The technique is
 to combine those into a single master regular expression and to loop over
 successive matches::
 
-    from typing import NamedTuple
+    import collections
     import re
 
-    class Token(NamedTuple):
-        type: str
-        value: str
-        line: int
-        column: int
+    Token = collections.namedtuple('Token', ['type', 'value', 'line', 'column'])
 
     def tokenize(code):
         keywords = {'IF', 'THEN', 'ENDIF', 'FOR', 'NEXT', 'GOSUB', 'RETURN'}

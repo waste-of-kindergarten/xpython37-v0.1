@@ -3,7 +3,7 @@ import unittest
 import locale
 import sys
 import codecs
-
+import warnings
 
 class BaseLocalizedTest(unittest.TestCase):
     #
@@ -334,7 +334,8 @@ class TestFrFRNumberFormatting(FrFRCookedTest, BaseFormattingTest):
         euro = '\u20ac'
         self._test_currency(50000, "50000,00 " + euro)
         self._test_currency(50000, "50 000,00 " + euro, grouping=True)
-        self._test_currency(50000, "50 000,00 EUR",
+        # XXX is the trailing space a bug?
+        self._test_currency(50000, "50 000,00 EUR ",
             grouping=True, international=True)
 
 
@@ -494,7 +495,7 @@ class NormalizeTest(unittest.TestCase):
 class TestMiscellaneous(unittest.TestCase):
     def test_defaults_UTF8(self):
         # Issue #18378: on (at least) macOS setting LC_CTYPE to "UTF-8" is
-        # valid. Furthermore LC_CTYPE=UTF is used by the UTF-8 locale coercing
+        # valid. Futhermore LC_CTYPE=UTF is used by the UTF-8 locale coercing
         # during interpreter startup (on macOS).
         import _locale
         import os
@@ -563,13 +564,7 @@ class TestMiscellaneous(unittest.TestCase):
         loc = locale.getlocale(locale.LC_CTYPE)
         if verbose:
             print('testing with %a' % (loc,), end=' ', flush=True)
-        try:
-            locale.setlocale(locale.LC_CTYPE, loc)
-        except locale.Error as exc:
-            # bpo-37945: setlocale(LC_CTYPE) fails with getlocale(LC_CTYPE)
-            # and the tr_TR locale on Windows. getlocale() builds a locale
-            # which is not recognize by setlocale().
-            self.skipTest(f"setlocale(LC_CTYPE, {loc!r}) failed: {exc!r}")
+        locale.setlocale(locale.LC_CTYPE, loc)
         self.assertEqual(loc, locale.getlocale(locale.LC_CTYPE))
 
     def test_invalid_locale_format_in_localetuple(self):

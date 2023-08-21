@@ -53,7 +53,7 @@ programs, however, and result in error messages as shown here::
    >>> '2' + 2
    Traceback (most recent call last):
      File "<stdin>", line 1, in <module>
-   TypeError: can only concatenate str (not "int") to str
+   TypeError: Can't convert 'int' object to str implicitly
 
 The last line of the error message indicates what happened. Exceptions come in
 different types, and the type is printed as part of the message: the types in
@@ -67,7 +67,7 @@ The rest of the line provides detail based on the type of exception and what
 caused it.
 
 The preceding part of the error message shows the context where the exception
-occurred, in the form of a stack traceback. In general it contains a stack
+happened, in the form of a stack traceback. In general it contains a stack
 traceback listing source lines; however, it will not display lines read from
 standard input.
 
@@ -267,54 +267,6 @@ re-raise the exception::
    NameError: HiThere
 
 
-.. _tut-exception-chaining:
-
-Exception Chaining
-==================
-
-The :keyword:`raise` statement allows an optional :keyword:`from<raise>` which enables
-chaining exceptions. For example::
-
-    # exc must be exception instance or None.
-    raise RuntimeError from exc
-
-This can be useful when you are transforming exceptions. For example::
-
-    >>> def func():
-    ...     raise IOError
-    ...
-    >>> try:
-    ...     func()
-    ... except IOError as exc:
-    ...     raise RuntimeError('Failed to open database') from exc
-    ...
-    Traceback (most recent call last):
-      File "<stdin>", line 2, in <module>
-      File "<stdin>", line 2, in func
-    OSError
-    <BLANKLINE>
-    The above exception was the direct cause of the following exception:
-    <BLANKLINE>
-    Traceback (most recent call last):
-      File "<stdin>", line 4, in <module>
-    RuntimeError: Failed to open database
-
-Exception chaining happens automatically when an exception is raised inside an
-:keyword:`except` or :keyword:`finally` section. Exception chaining can be
-disabled by using ``from None`` idiom:
-
-    >>> try:
-    ...     open('database.sqlite')
-    ... except OSError:
-    ...     raise RuntimeError from None
-    ...
-    Traceback (most recent call last):
-      File "<stdin>", line 4, in <module>
-    RuntimeError
-
-For more information about chaining mechanics, see :ref:`bltin-exceptions`.
-
-
 .. _tut-userexceptions:
 
 User-defined Exceptions
@@ -326,7 +278,41 @@ be derived from the :exc:`Exception` class, either directly or indirectly.
 
 Exception classes can be defined which do anything any other class can do, but
 are usually kept simple, often only offering a number of attributes that allow
-information about the error to be extracted by handlers for the exception.
+information about the error to be extracted by handlers for the exception.  When
+creating a module that can raise several distinct errors, a common practice is
+to create a base class for exceptions defined by that module, and subclass that
+to create specific exception classes for different error conditions::
+
+   class Error(Exception):
+       """Base class for exceptions in this module."""
+       pass
+
+   class InputError(Error):
+       """Exception raised for errors in the input.
+
+       Attributes:
+           expression -- input expression in which the error occurred
+           message -- explanation of the error
+       """
+
+       def __init__(self, expression, message):
+           self.expression = expression
+           self.message = message
+
+   class TransitionError(Error):
+       """Raised when an operation attempts a state transition that's not
+       allowed.
+
+       Attributes:
+           previous -- state at beginning of transition
+           next -- attempted new state
+           message -- explanation of why the specific transition is not allowed
+       """
+
+       def __init__(self, previous, next, message):
+           self.previous = previous
+           self.next = next
+           self.message = message
 
 Most exceptions are defined with names that end in "Error", similar to the
 naming of the standard exceptions.
@@ -370,10 +356,6 @@ points discuss more complex cases when an exception occurs:
 * An exception could occur during execution of an :keyword:`!except`
   or :keyword:`!else` clause. Again, the exception is re-raised after
   the :keyword:`!finally` clause has been executed.
-
-* If the :keyword:`!finally` clause executes a :keyword:`break`,
-  :keyword:`continue` or :keyword:`return` statement, exceptions are not
-  re-raised.
 
 * If the :keyword:`!try` statement reaches a :keyword:`break`,
   :keyword:`continue` or :keyword:`return` statement, the

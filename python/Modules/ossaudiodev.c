@@ -14,12 +14,14 @@
  * (c) 2002 Gregory P. Ward.  All Rights Reserved.
  * (c) 2002 Python Software Foundation.  All Rights Reserved.
  *
+ * XXX need a license statement
+ *
  * $Id$
  */
 
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"
 
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
@@ -537,7 +539,7 @@ oss_exit(PyObject *self, PyObject *unused)
 {
     _Py_IDENTIFIER(close);
 
-    PyObject *ret = _PyObject_CallMethodIdNoArgs(self, &PyId_close);
+    PyObject *ret = _PyObject_CallMethodId(self, &PyId_close, NULL);
     if (!ret)
         return NULL;
     Py_DECREF(ret);
@@ -919,42 +921,45 @@ static PyMethodDef oss_mixer_methods[] = {
     { NULL,             NULL}
 };
 
-static PyMemberDef oss_members[] = {
-    {"name", T_STRING, offsetof(oss_audio_t, devicename), READONLY, NULL},
-    {NULL}
-};
-
 static PyObject *
-oss_closed_getter(oss_audio_t *self, void *closure)
+oss_getattro(oss_audio_t *self, PyObject *nameobj)
 {
-    return PyBool_FromLong(self->fd == -1);
-}
+    const char *name = "";
+    PyObject * rval = NULL;
 
-static PyObject *
-oss_mode_getter(oss_audio_t *self, void *closure)
-{
-    switch(self->mode) {
-        case O_RDONLY:
-            return PyUnicode_FromString("r");
-            break;
-        case O_RDWR:
-            return PyUnicode_FromString("rw");
-            break;
-        case O_WRONLY:
-            return PyUnicode_FromString("w");
-            break;
-        default:
-            /* From newossobject(), self->mode can only be one
-               of these three values. */
-            Py_UNREACHABLE();
+    if (PyUnicode_Check(nameobj)) {
+        name = PyUnicode_AsUTF8(nameobj);
+        if (name == NULL)
+            return NULL;
     }
-}
 
-static PyGetSetDef oss_getsetlist[] = {
-    {"closed", (getter)oss_closed_getter, (setter)NULL, NULL},
-    {"mode", (getter)oss_mode_getter, (setter)NULL, NULL},
-    {NULL},
-};
+    if (strcmp(name, "closed") == 0) {
+        rval = (self->fd == -1) ? Py_True : Py_False;
+        Py_INCREF(rval);
+    }
+    else if (strcmp(name, "name") == 0) {
+        rval = PyUnicode_FromString(self->devicename);
+    }
+    else if (strcmp(name, "mode") == 0) {
+        /* No need for a "default" in this switch: from newossobject(),
+           self->mode can only be one of these three values. */
+        switch(self->mode) {
+            case O_RDONLY:
+                rval = PyUnicode_FromString("r");
+                break;
+            case O_RDWR:
+                rval = PyUnicode_FromString("rw");
+                break;
+            case O_WRONLY:
+                rval = PyUnicode_FromString("w");
+                break;
+        }
+    }
+    else {
+        rval = PyObject_GenericGetAttr((PyObject *)self, nameobj);
+    }
+    return rval;
+}
 
 static PyTypeObject OSSAudioType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -963,10 +968,10 @@ static PyTypeObject OSSAudioType = {
     0,                          /*tp_itemsize*/
     /* methods */
     (destructor)oss_dealloc,    /*tp_dealloc*/
-    0,                          /*tp_vectorcall_offset*/
+    0,                          /*tp_print*/
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
-    0,                          /*tp_as_async*/
+    0,                          /*tp_reserved*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -974,7 +979,7 @@ static PyTypeObject OSSAudioType = {
     0,                          /*tp_hash*/
     0,                          /*tp_call*/
     0,                          /*tp_str*/
-    0,                          /*tp_getattro*/
+    (getattrofunc)oss_getattro, /*tp_getattro*/
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT,         /*tp_flags*/
@@ -986,8 +991,6 @@ static PyTypeObject OSSAudioType = {
     0,                          /*tp_iter*/
     0,                          /*tp_iternext*/
     oss_methods,                /*tp_methods*/
-    oss_members,                /*tp_members*/
-    oss_getsetlist,             /*tp_getset*/
 };
 
 static PyTypeObject OSSMixerType = {
@@ -997,10 +1000,10 @@ static PyTypeObject OSSMixerType = {
     0,                              /*tp_itemsize*/
     /* methods */
     (destructor)oss_mixer_dealloc,  /*tp_dealloc*/
-    0,                              /*tp_vectorcall_offset*/
+    0,                              /*tp_print*/
     0,                              /*tp_getattr*/
     0,                              /*tp_setattr*/
-    0,                              /*tp_as_async*/
+    0,                              /*tp_reserved*/
     0,                              /*tp_repr*/
     0,                              /*tp_as_number*/
     0,                              /*tp_as_sequence*/
@@ -1243,12 +1246,8 @@ PyInit_ossaudiodev(void)
     _EXPORT_INT(m, SNDCTL_DSP_GETSPDIF);
 #endif
     _EXPORT_INT(m, SNDCTL_DSP_GETTRIGGER);
-#ifdef SNDCTL_DSP_MAPINBUF
     _EXPORT_INT(m, SNDCTL_DSP_MAPINBUF);
-#endif
-#ifdef SNDCTL_DSP_MAPOUTBUF
     _EXPORT_INT(m, SNDCTL_DSP_MAPOUTBUF);
-#endif
     _EXPORT_INT(m, SNDCTL_DSP_NONBLOCK);
     _EXPORT_INT(m, SNDCTL_DSP_POST);
 #ifdef SNDCTL_DSP_PROFILE

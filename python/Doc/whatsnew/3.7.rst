@@ -102,7 +102,7 @@ CPython implementation improvements:
   * :ref:`PEP 538 <whatsnew37-pep538>`, legacy C locale coercion
   * :ref:`PEP 540 <whatsnew37-pep540>`, forced UTF-8 runtime mode
 * :ref:`PEP 552 <whatsnew37-pep552>`, deterministic .pycs
-* :ref:`New Python Development Mode <whatsnew37-devmode>`
+* :ref:`the new development runtime mode <whatsnew37-devmode>`
 * :ref:`PEP 565 <whatsnew37-pep565>`, improved :exc:`DeprecationWarning`
   handling
 
@@ -479,15 +479,15 @@ Three new translations have been added:
 
 .. _whatsnew37-devmode:
 
-Python Development Mode (-X dev)
+Development Runtime Mode: -X dev
 --------------------------------
 
 The new :option:`-X` ``dev`` command line option or the new
 :envvar:`PYTHONDEVMODE` environment variable can be used to enable
-:ref:`Python Development Mode <devmode>`.  When in development mode, Python performs
+CPython's *development mode*.  When in development mode, CPython performs
 additional runtime checks that are too expensive to be enabled by default.
-See :ref:`Python Development Mode <devmode>` documentation for the full
-description.
+See :option:`-X` ``dev`` documentation for the full description of the effects
+of this mode.
 
 
 Other Language Changes
@@ -537,7 +537,7 @@ Other Language Changes
 * The new :option:`-X` ``importtime`` option or the
   :envvar:`PYTHONPROFILEIMPORTTIME` environment variable can be used to show
   the timing of each module import.
-  (Contributed by Inada Naoki in :issue:`31415`.)
+  (Contributed by Victor Stinner in :issue:`31415`.)
 
 
 New Modules
@@ -636,7 +636,7 @@ The :mod:`asyncio` module has received many new features, usability and
 :ref:`performance improvements <whatsnew37-asyncio-perf>`.  Notable changes
 include:
 
-* The new :term:`provisional <provisional API>` :func:`asyncio.run` function can
+* The new :term:`provisional <provisional api>` :func:`asyncio.run` function can
   be used to run a coroutine from synchronous code by automatically creating and
   destroying the event loop.
   (Contributed by Yury Selivanov in :issue:`32314`.)
@@ -1379,6 +1379,10 @@ Supported protocols are indicated by several new flags, such as
 :data:`~ssl.HAS_TLSv1_1`.
 (Contributed by Christian Heimes in :issue:`32609`.)
 
+Added :attr:`SSLContext.post_handshake_auth` to enable and
+:meth:`ssl.SSLSocket.verify_client_post_handshake` to initiate TLS 1.3
+post-handshake authentication.
+(Contributed by Christian Heimes in :issue:`34670`.)
 
 string
 ------
@@ -1596,6 +1600,15 @@ The initialization of the default warnings filters has changed as follows:
 Deprecation warnings are once again shown by default in single-file scripts and
 at the interactive prompt.  See :ref:`whatsnew37-pep565` for details.
 (Contributed by Nick Coghlan in :issue:`31975`.)
+
+
+xml
+---
+
+As mitigation against DTD and external entity retrieval, the
+:mod:`xml.dom.minidom` and :mod:`xml.sax` modules no longer process
+external entities by default.
+(Contributed by Christian Heimes in :issue:`17239`.)
 
 
 xml.etree
@@ -2532,6 +2545,9 @@ In 3.7.1 the C API for Context Variables
 :ref:`was updated <contextvarsobjects_pointertype_change>` to use
 :c:type:`PyObject` pointers.  See also :issue:`34762`.
 
+:mod:`xml.dom.minidom` and :mod:`xml.sax` modules no longer process
+external entities by default. See also :issue:`17239`.
+
 In 3.7.1 the :mod:`tokenize` module now implicitly emits a ``NEWLINE`` token
 when provided with input that does not have a trailing new line.  This behavior
 now matches what the C tokenizer does internally.
@@ -2556,16 +2572,3 @@ because of the behavior of the socket option ``SO_REUSEADDR`` in UDP. For more
 details, see the documentation for ``loop.create_datagram_endpoint()``.
 (Contributed by Kyle Stanley, Antoine Pitrou, and Yury Selivanov in
 :issue:`37228`.)
-
-Notable changes in Python 3.7.10
-================================
-
-Earlier Python versions allowed using both ``;`` and ``&`` as
-query parameter separators in :func:`urllib.parse.parse_qs` and
-:func:`urllib.parse.parse_qsl`.  Due to security concerns, and to conform with
-newer W3C recommendations, this has been changed to allow only a single
-separator key, with ``&`` as the default.  This change also affects
-:func:`cgi.parse` and :func:`cgi.parse_multipart` as they use the affected
-functions internally. For more details, please see their respective
-documentation.
-(Contributed by Adam Goldschmidt, Senthil Kumaran and Ken Jin in :issue:`42967`.)

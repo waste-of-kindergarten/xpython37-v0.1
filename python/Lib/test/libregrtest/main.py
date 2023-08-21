@@ -12,12 +12,11 @@ import time
 import unittest
 from test.libregrtest.cmdline import _parse_args
 from test.libregrtest.runtest import (
-    findtests, runtest, get_abs_module, is_failed,
-    STDTESTS, NOTTESTS, PROGRESS_MIN_TIME,
-    Passed, Failed, EnvChanged, Skipped, ResourceDenied, Interrupted,
-    ChildError, DidNotRun)
+    findtests, runtest, get_abs_module,
+    STDTESTS, NOTTESTS, PASSED, FAILED, ENV_CHANGED, SKIPPED, RESOURCE_DENIED,
+    INTERRUPTED, CHILD_ERROR, TEST_DID_NOT_RUN, TIMEOUT,
+    PROGRESS_MIN_TIME, format_test_result, is_failed)
 from test.libregrtest.setup import setup_tests
-from test.libregrtest.pgo import setup_pgo_tests
 from test.libregrtest.utils import removepy, count, format_duration, printlist
 from test import support
 
@@ -66,7 +65,6 @@ class Regrtest:
         self.resource_denieds = []
         self.environment_changed = []
         self.run_no_tests = []
-        self.need_rerun = []
         self.rerun = []
         self.first_result = None
         self.interrupted = False
@@ -100,32 +98,34 @@ class Regrtest:
                 | set(self.run_no_tests))
 
     def accumulate_result(self, result, rerun=False):
-        test_name = result.name
+        test_name = result.test_name
+        ok = result.result
 
-        if not isinstance(result, (ChildError, Interrupted)) and not rerun:
-            self.test_times.append((result.duration_sec, test_name))
+        if ok not in (CHILD_ERROR, INTERRUPTED) and not rerun:
+            self.test_times.append((result.test_time, test_name))
 
-        if isinstance(result, Passed):
+        if ok == PASSED:
             self.good.append(test_name)
-        elif isinstance(result, ResourceDenied):
-            self.skipped.append(test_name)
-            self.resource_denieds.append(test_name)
-        elif isinstance(result, Skipped):
-            self.skipped.append(test_name)
-        elif isinstance(result, EnvChanged):
-            self.environment_changed.append(test_name)
-        elif isinstance(result, Failed):
+        elif ok in (FAILED, CHILD_ERROR):
             if not rerun:
                 self.bad.append(test_name)
-                self.need_rerun.append(result)
-        elif isinstance(result, DidNotRun):
+        elif ok == ENV_CHANGED:
+            self.environment_changed.append(test_name)
+        elif ok == SKIPPED:
+            self.skipped.append(test_name)
+        elif ok == RESOURCE_DENIED:
+            self.skipped.append(test_name)
+            self.resource_denieds.append(test_name)
+        elif ok == TEST_DID_NOT_RUN:
             self.run_no_tests.append(test_name)
-        elif isinstance(result, Interrupted):
+        elif ok == INTERRUPTED:
             self.interrupted = True
+        elif ok == TIMEOUT:
+            self.bad.append(test_name)
         else:
-            raise ValueError("invalid test result: %r" % result)
+            raise ValueError("invalid test result: %r" % ok)
 
-        if rerun and not isinstance(result, (Failed, Interrupted)):
+        if rerun and ok not in {FAILED, CHILD_ERROR, INTERRUPTED}:
             self.bad.remove(test_name)
 
         xml_data = result.xml_data
@@ -224,10 +224,6 @@ class Regrtest:
 
         removepy(self.tests)
 
-        if self.ns.pgo:
-            # add default PGO tests if no tests are specified
-            setup_pgo_tests(self.ns)
-
         stdtests = STDTESTS[:]
         nottests = NOTTESTS.copy()
         if self.ns.exclude:
@@ -310,33 +306,15 @@ class Regrtest:
 
         self.log()
         self.log("Re-running failed tests in verbose mode")
-        rerun_list = list(self.need_rerun)
-        self.need_rerun.clear()
-        for result in rerun_list:
-            test_name = result.name
-            self.rerun.append(test_name)
-
-            errors = result.errors or []
-            failures = result.failures or []
-            error_names = [test_full_name.split(" ")[0] for (test_full_name, *_) in errors]
-            failure_names = [test_full_name.split(" ")[0] for (test_full_name, *_) in failures]
+        self.rerun = self.bad[:]
+        for test_name in self.rerun:
+            self.log(f"Re-running {test_name} in verbose mode")
             self.ns.verbose = True
-            orig_match_tests = self.ns.match_tests
-            if errors or failures:
-                if self.ns.match_tests is None:
-                    self.ns.match_tests = []
-                self.ns.match_tests.extend(error_names)
-                self.ns.match_tests.extend(failure_names)
-                matching = "matching: " + ", ".join(self.ns.match_tests)
-                self.log(f"Re-running {test_name} in verbose mode ({matching})")
-            else:
-                self.log(f"Re-running {test_name} in verbose mode")
             result = runtest(self.ns, test_name)
-            self.ns.match_tests = orig_match_tests
 
             self.accumulate_result(result, rerun=True)
 
-            if isinstance(result, Interrupted):
+            if result.result == INTERRUPTED:
                 break
 
         if self.bad:
@@ -437,14 +415,14 @@ class Regrtest:
                 result = runtest(self.ns, test_name)
                 self.accumulate_result(result)
 
-            if isinstance(result, Interrupted):
+            if result.result == INTERRUPTED:
                 break
 
-            previous_test = str(result)
+            previous_test = format_test_result(result)
             test_time = time.monotonic() - start_time
             if test_time >= PROGRESS_MIN_TIME:
                 previous_test = "%s in %s" % (previous_test, format_duration(test_time))
-            elif isinstance(result, Passed):
+            elif result.result == PASSED:
                 # be quiet: say nothing if the test passed shortly
                 previous_test = None
 
@@ -530,24 +508,7 @@ class Regrtest:
 
         if self.ns.use_mp:
             from test.libregrtest.runtest_mp import run_tests_multiprocess
-            # If we're on windows and this is the parent runner (not a worker),
-            # track the load average.
-            if sys.platform == 'win32' and self.worker_test_name is None:
-                from test.libregrtest.win_utils import WindowsLoadTracker
-
-                try:
-                    self.win_load_tracker = WindowsLoadTracker()
-                except PermissionError as error:
-                    # Standard accounts may not have access to the performance
-                    # counters.
-                    print(f'Failed to create WindowsLoadTracker: {error}')
-
-            try:
-                run_tests_multiprocess(self)
-            finally:
-                if self.win_load_tracker is not None:
-                    self.win_load_tracker.close()
-                    self.win_load_tracker = None
+            run_tests_multiprocess(self)
         else:
             self.run_tests_sequential()
 
@@ -630,14 +591,13 @@ class Regrtest:
             test_cwd = 'test_python_worker_{}'.format(pid)
         else:
             test_cwd = 'test_python_{}'.format(pid)
-        test_cwd += support.FS_NONASCII
         test_cwd = os.path.join(self.tmp_dir, test_cwd)
         return test_cwd
 
     def cleanup(self):
         import glob
 
-        path = os.path.join(glob.escape(self.tmp_dir), 'test_python_*')
+        path = os.path.join(self.tmp_dir, 'test_python_*')
         print("Cleanup %s directory" % self.tmp_dir)
         for name in glob.glob(path):
             if os.path.isdir(name):
@@ -695,7 +655,6 @@ class Regrtest:
             input("Press any key to continue...")
 
         support.PGO = self.ns.pgo
-        support.PGO_EXTENDED = self.ns.pgo_extended
 
         setup_tests(self.ns)
 
@@ -709,11 +668,28 @@ class Regrtest:
             self.list_cases()
             sys.exit(0)
 
-        self.run_tests()
-        self.display_result()
+        # If we're on windows and this is the parent runner (not a worker),
+        # track the load average.
+        if sys.platform == 'win32' and self.worker_test_name is None:
+            from test.libregrtest.win_utils import WindowsLoadTracker
 
-        if self.ns.verbose2 and self.bad:
-            self.rerun_failed_tests()
+            try:
+                self.win_load_tracker = WindowsLoadTracker()
+            except FileNotFoundError as error:
+                # Windows IoT Core and Windows Nano Server do not provide
+                # typeperf.exe for x64, x86 or ARM
+                print(f'Failed to create WindowsLoadTracker: {error}')
+
+        try:
+            self.run_tests()
+            self.display_result()
+
+            if self.ns.verbose2 and self.bad:
+                self.rerun_failed_tests()
+        finally:
+            if self.win_load_tracker is not None:
+                self.win_load_tracker.close()
+                self.win_load_tracker = None
 
         self.finalize()
 

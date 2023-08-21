@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 **********************
 Argument Clinic How-To
@@ -765,7 +765,7 @@ All Argument Clinic converters accept the following arguments:
 
   ``annotation``
     The annotation value for this parameter.  Not currently supported,
-    because :pep:`8` mandates that the Python library may not use
+    because PEP 8 mandates that the Python library may not use
     annotations.
 
 In addition, some converters accept additional arguments.  Here is a list
@@ -877,12 +877,6 @@ converter::
 
     Write a pickled representation of obj to the open file.
     [clinic start generated code]*/
-
-One advantage of real converters is that they're more flexible than legacy
-converters.  For example, the ``unsigned_int`` converter (and all the
-``unsigned_`` converters) can be specified without ``bitwise=True``.  Their
-default behavior performs range checking on the value, and they won't accept
-negative numbers.  You just can't do that with a legacy converter!
 
 Argument Clinic will show you all the converters it has
 available.  For each converter it'll show you all the parameters
@@ -1288,7 +1282,7 @@ Here's the simplest example of a custom converter, from ``Modules/zlibmodule.c``
     /*[python end generated code: output=da39a3ee5e6b4b0d input=35521e4e733823c7]*/
 
 This block adds a converter to Argument Clinic named ``ssize_t``.  Parameters
-declared as ``ssize_t`` will be declared as type :c:type:`Py_ssize_t`, and will
+declared as ``ssize_t`` will be declared as type ``Py_ssize_t``, and will
 be parsed by the ``'O&'`` format unit, which will call the
 ``ssize_t_converter`` converter function.  ``ssize_t`` variables
 automatically support default values.

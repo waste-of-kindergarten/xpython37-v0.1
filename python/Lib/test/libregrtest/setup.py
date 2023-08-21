@@ -10,8 +10,6 @@ try:
 except ImportError:
     gc = None
 
-from test.libregrtest.utils import setup_unraisable_hook
-
 
 def setup_tests(ns):
     try:
@@ -35,7 +33,6 @@ def setup_tests(ns):
         for signum in signals:
             faulthandler.register(signum, chain=True, file=stderr_fd)
 
-    _adjust_resource_limits()
     replace_stdout()
     support.record_original_stdout(sys.stdout)
 
@@ -70,28 +67,34 @@ def setup_tests(ns):
     if ns.threshold is not None:
         gc.set_threshold(ns.threshold)
 
-    support.suppress_msvcrt_asserts(ns.verbose and ns.verbose >= 2)
+    suppress_msvcrt_asserts(ns.verbose and ns.verbose >= 2)
 
     support.use_resources = ns.use_resources
 
-    if hasattr(sys, 'addaudithook'):
-        # Add an auditing hook for all tests to ensure PySys_Audit is tested
-        def _test_audit_hook(name, args):
-            pass
-        sys.addaudithook(_test_audit_hook)
 
-    setup_unraisable_hook()
+def suppress_msvcrt_asserts(verbose):
+    try:
+        import msvcrt
+    except ImportError:
+        return
 
-    if ns.timeout is not None:
-        # For a slow buildbot worker, increase SHORT_TIMEOUT and LONG_TIMEOUT
-        support.SHORT_TIMEOUT = max(support.SHORT_TIMEOUT, ns.timeout / 40)
-        support.LONG_TIMEOUT = max(support.LONG_TIMEOUT, ns.timeout / 4)
+    msvcrt.SetErrorMode(msvcrt.SEM_FAILCRITICALERRORS|
+                        msvcrt.SEM_NOALIGNMENTFAULTEXCEPT|
+                        msvcrt.SEM_NOGPFAULTERRORBOX|
+                        msvcrt.SEM_NOOPENFILEERRORBOX)
+    try:
+        msvcrt.CrtSetReportMode
+    except AttributeError:
+        # release build
+        return
 
-        # If --timeout is short: reduce timeouts
-        support.LOOPBACK_TIMEOUT = min(support.LOOPBACK_TIMEOUT, ns.timeout)
-        support.INTERNET_TIMEOUT = min(support.INTERNET_TIMEOUT, ns.timeout)
-        support.SHORT_TIMEOUT = min(support.SHORT_TIMEOUT, ns.timeout)
-        support.LONG_TIMEOUT = min(support.LONG_TIMEOUT, ns.timeout)
+    for m in [msvcrt.CRT_WARN, msvcrt.CRT_ERROR, msvcrt.CRT_ASSERT]:
+        if verbose:
+            msvcrt.CrtSetReportMode(m, msvcrt.CRTDBG_MODE_FILE)
+            msvcrt.CrtSetReportFile(m, msvcrt.CRTDBG_FILE_STDERR)
+        else:
+            msvcrt.CrtSetReportMode(m, 0)
+
 
 
 def replace_stdout():
@@ -118,26 +121,3 @@ def replace_stdout():
         sys.stdout.close()
         sys.stdout = stdout
     atexit.register(restore_stdout)
-
-
-def _adjust_resource_limits():
-    """Adjust the system resource limits (ulimit) if needed."""
-    try:
-        import resource
-        from resource import RLIMIT_NOFILE, RLIM_INFINITY
-    except ImportError:
-        return
-    fd_limit, max_fds = resource.getrlimit(RLIMIT_NOFILE)
-    # On macOS the default fd limit is sometimes too low (256) for our
-    # test suite to succeed.  Raise it to something more reasonable.
-    # 1024 is a common Linux default.
-    desired_fds = 1024
-    if fd_limit < desired_fds and fd_limit < max_fds:
-        new_fd_limit = min(desired_fds, max_fds)
-        try:
-            resource.setrlimit(RLIMIT_NOFILE, (new_fd_limit, max_fds))
-            print(f"Raised RLIMIT_NOFILE: {fd_limit} -> {new_fd_limit}")
-        except (ValueError, OSError) as err:
-            print(f"Unable to raise RLIMIT_NOFILE from {fd_limit} to "
-                  f"{new_fd_limit}: {err}.")
-

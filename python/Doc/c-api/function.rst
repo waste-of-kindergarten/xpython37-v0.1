@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _function-objects:
 
@@ -26,7 +26,7 @@ There are a few functions specific to Python functions.
 .. c:function:: int PyFunction_Check(PyObject *o)
 
    Return true if *o* is a function object (has type :c:data:`PyFunction_Type`).
-   The parameter must not be ``NULL``.  This function always succeeds.
+   The parameter must not be ``NULL``.
 
 
 .. c:function:: PyObject* PyFunction_New(PyObject *code, PyObject *globals)

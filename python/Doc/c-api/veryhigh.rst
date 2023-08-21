@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 
 .. _veryhigh:
@@ -16,11 +16,11 @@ parameter.  The available start symbols are :const:`Py_eval_input`,
 :const:`Py_file_input`, and :const:`Py_single_input`.  These are described
 following the functions which accept them as parameters.
 
-Note also that several of these functions take :c:type:`FILE*` parameters.  One
+Note also that several of these functions take :c:type:`FILE\*` parameters.  One
 particular issue which needs to be handled carefully is that the :c:type:`FILE`
 structure for different C libraries can be different and incompatible.  Under
 Windows (at least), it is possible for dynamically linked extensions to actually
-use different libraries, so care should be taken that :c:type:`FILE*` parameters
+use different libraries, so care should be taken that :c:type:`FILE\*` parameters
 are only passed to these functions if it is certain that they were created by
 the same library that the Python runtime is using.
 
@@ -40,13 +40,6 @@ the same library that the Python runtime is using.
    Note that if an otherwise unhandled :exc:`SystemExit` is raised, this
    function will not return ``1``, but exit the process, as long as
    ``Py_InspectFlag`` is not set.
-
-
-.. c:function:: int Py_BytesMain(int argc, char **argv)
-
-   Similar to :c:func:`Py_Main` but *argv* is an array of bytes strings.
-
-   .. versionadded:: 3.8
 
 
 .. c:function:: int PyRun_AnyFile(FILE *fp, const char *filename)
@@ -75,8 +68,6 @@ the same library that the Python runtime is using.
    :c:func:`PyRun_SimpleFile`.  *filename* is decoded from the filesystem
    encoding (:func:`sys.getfilesystemencoding`).  If *filename* is ``NULL``, this
    function uses ``"???"`` as the filename.
-   If *closeit* is true, the file is closed before
-   ``PyRun_SimpleFileExFlags()`` returns.
 
 
 .. c:function:: int PyRun_SimpleString(const char *command)
@@ -119,7 +110,7 @@ the same library that the Python runtime is using.
    closed before PyRun_SimpleFileExFlags returns.
 
    .. note::
-      On Windows, *fp* should be opened as binary mode (e.g. ``fopen(filename, "rb")``).
+      On Windows, *fp* should be opened as binary mode (e.g. ``fopen(filename, "rb")``.
       Otherwise, Python may not handle script file with LF line ending correctly.
 
 
@@ -195,16 +186,12 @@ the same library that the Python runtime is using.
    :c:func:`PyParser_SimpleParseStringFlagsFilename` below, leaving  *filename* set
    to ``NULL`` and *flags* set to ``0``.
 
-   .. deprecated-removed:: 3.9 3.10
-
 
 .. c:function:: struct _node* PyParser_SimpleParseStringFlags( const char *str, int start, int flags)
 
    This is a simplified interface to
    :c:func:`PyParser_SimpleParseStringFlagsFilename` below, leaving  *filename* set
    to ``NULL``.
-
-   .. deprecated-removed:: 3.9 3.10
 
 
 .. c:function:: struct _node* PyParser_SimpleParseStringFlagsFilename( const char *str, const char *filename, int start, int flags)
@@ -215,23 +202,17 @@ the same library that the Python runtime is using.
    many times. *filename* is decoded from the filesystem encoding
    (:func:`sys.getfilesystemencoding`).
 
-   .. deprecated-removed:: 3.9 3.10
-
 
 .. c:function:: struct _node* PyParser_SimpleParseFile(FILE *fp, const char *filename, int start)
 
    This is a simplified interface to :c:func:`PyParser_SimpleParseFileFlags` below,
    leaving *flags* set to ``0``.
 
-   .. deprecated-removed:: 3.9 3.10
-
 
 .. c:function:: struct _node* PyParser_SimpleParseFileFlags(FILE *fp, const char *filename, int start, int flags)
 
    Similar to :c:func:`PyParser_SimpleParseStringFlagsFilename`, but the Python
    source code is read from *fp* instead of an in-memory string.
-
-   .. deprecated-removed:: 3.9 3.10
 
 
 .. c:function:: PyObject* PyRun_String(const char *str, int start, PyObject *globals, PyObject *locals)
@@ -347,12 +328,12 @@ the same library that the Python runtime is using.
 
 .. c:function:: PyObject* PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
-   This is the main, unvarnished function of Python interpretation.  The code
-   object associated with the execution frame *f* is executed, interpreting
-   bytecode and executing calls as needed.  The additional *throwflag*
-   parameter can mostly be ignored - if true, then it causes an exception
-   to immediately be thrown; this is used for the :meth:`~generator.throw`
-   methods of generator objects.
+   This is the main, unvarnished function of Python interpretation.  It is
+   literally 2000 lines long.  The code object associated with the execution
+   frame *f* is executed, interpreting bytecode and executing calls as needed.
+   The additional *throwflag* parameter can mostly be ignored - if true, then
+   it causes an exception to immediately be thrown; this is used for the
+   :meth:`~generator.throw` methods of generator objects.
 
    .. versionchanged:: 3.4
       This function now includes a debug assertion to help ensure that it
@@ -400,22 +381,11 @@ the same library that the Python runtime is using.
 
    Whenever ``PyCompilerFlags *flags`` is ``NULL``, :attr:`cf_flags` is treated as
    equal to ``0``, and any modification due to ``from __future__ import`` is
-   discarded.
+   discarded.  ::
 
-   .. c:member:: int cf_flags
-
-      Compiler flags.
-
-   .. c:member:: int cf_feature_version
-
-      *cf_feature_version* is the minor Python version. It should be
-      initialized to ``PY_MINOR_VERSION``.
-
-      The field is ignored by default, it is used if and only if
-      ``PyCF_ONLY_AST`` flag is set in *cf_flags*.
-
-   .. versionchanged:: 3.8
-      Added *cf_feature_version* field.
+      struct PyCompilerFlags {
+          int cf_flags;
+      }
 
 
 .. c:var:: int CO_FUTURE_DIVISION

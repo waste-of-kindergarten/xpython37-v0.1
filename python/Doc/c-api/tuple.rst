@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _tupleobjects:
 
@@ -21,14 +21,14 @@ Tuple Objects
 
 .. c:function:: int PyTuple_Check(PyObject *p)
 
-   Return true if *p* is a tuple object or an instance of a subtype of the
-   tuple type.  This function always succeeds.
+   Return true if *p* is a tuple object or an instance of a subtype of the tuple
+   type.
 
 
 .. c:function:: int PyTuple_CheckExact(PyObject *p)
 
    Return true if *p* is a tuple object, but not an instance of a subtype of the
-   tuple type.  This function always succeeds.
+   tuple type.
 
 
 .. c:function:: PyObject* PyTuple_New(Py_ssize_t len)
@@ -111,6 +111,11 @@ Tuple Objects
    raises :exc:`MemoryError` or :exc:`SystemError`.
 
 
+.. c:function:: int PyTuple_ClearFreeList()
+
+   Clear the free list. Return the total number of freed items.
+
+
 Struct Sequence Objects
 -----------------------
 
@@ -161,7 +166,7 @@ type.
 .. c:type:: PyStructSequence_Field
 
    Describes a field of a struct sequence. As a struct sequence is modeled as a
-   tuple, all fields are typed as :c:type:`PyObject*`.  The index in the
+   tuple, all fields are typed as :c:type:`PyObject\*`.  The index in the
    :attr:`fields` array of the :c:type:`PyStructSequence_Desc` determines which
    field of the struct sequence is described.
 
@@ -177,12 +182,9 @@ type.
    +-----------+------------------+-----------------------------------------+
 
 
-.. c:var:: const char * const PyStructSequence_UnnamedField
+.. c:var:: char* PyStructSequence_UnnamedField
 
    Special value for a field name to leave it unnamed.
-
-   .. versionchanged:: 3.9
-      The type was changed from ``char *``.
 
 
 .. c:function:: PyObject* PyStructSequence_New(PyTypeObject *type)

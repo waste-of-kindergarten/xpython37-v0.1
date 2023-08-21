@@ -122,17 +122,36 @@ Functions
 
    Convert a tuple or :class:`struct_time` representing a time as returned by
    :func:`gmtime` or :func:`localtime` to a string of the following
-   form: ``'Sun Jun 20 23:21:05 1993'``. The day field is two characters long
-   and is space padded if the day is a single digit,
-   e.g.: ``'Wed Jun  9 04:26:40 1993'``.
-
-   If *t* is not provided, the current time as returned by :func:`localtime`
-   is used. Locale information is not used by :func:`asctime`.
+   form: ``'Sun Jun 20 23:21:05 1993'``.  If *t* is not provided, the current time
+   as returned by :func:`localtime` is used. Locale information is not used by
+   :func:`asctime`.
 
    .. note::
 
       Unlike the C function of the same name, :func:`asctime` does not add a
       trailing newline.
+
+
+.. function:: clock()
+
+   .. index::
+      single: CPU time
+      single: processor time
+      single: benchmarking
+
+   On Unix, return the current processor time as a floating point number expressed
+   in seconds.  The precision, and in fact the very definition of the meaning of
+   "processor time", depends on that of the C function of the same name.
+
+   On Windows, this function returns wall-clock seconds elapsed since the first
+   call to this function, as a floating point number, based on the Win32 function
+   :c:func:`QueryPerformanceCounter`. The resolution is typically better than one
+   microsecond.
+
+   .. deprecated-removed:: 3.3 3.8
+      The behaviour of this function depends on the platform: use
+      :func:`perf_counter` or :func:`process_time` instead, depending on your
+      requirements, to have a well defined behaviour.
 
 .. function:: pthread_getcpuclockid(thread_id)
 
@@ -201,15 +220,10 @@ Functions
 
 .. function:: ctime([secs])
 
-   Convert a time expressed in seconds since the epoch to a string of a form:
-   ``'Sun Jun 20 23:21:05 1993'`` representing local time. The day field
-   is two characters long and is space padded if the day is a single digit,
-   e.g.: ``'Wed Jun  9 04:26:40 1993'``.
-
-   If *secs* is not provided or :const:`None`, the current time as
-   returned by :func:`.time` is used. ``ctime(secs)`` is equivalent to
-   ``asctime(localtime(secs))``. Locale information is not used by
-   :func:`ctime`.
+   Convert a time expressed in seconds since the epoch to a string representing
+   local time. If *secs* is not provided or :const:`None`, the current time as
+   returned by :func:`.time` is used.  ``ctime(secs)`` is equivalent to
+   ``asctime(localtime(secs))``. Locale information is not used by :func:`ctime`.
 
 
 .. function:: get_clock_info(name)
@@ -218,6 +232,7 @@ Functions
    Supported clock names and the corresponding functions to read their value
    are:
 
+   * ``'clock'``: :func:`time.clock`
    * ``'monotonic'``: :func:`time.monotonic`
    * ``'perf_counter'``: :func:`time.perf_counter`
    * ``'process_time'``: :func:`time.process_time`
@@ -253,12 +268,6 @@ Functions
    :const:`None`, the current time as returned by :func:`.time` is used.  The dst
    flag is set to ``1`` when DST applies to the given time.
 
-   :func:`localtime` may raise :exc:`OverflowError`, if the timestamp is
-   outside the range of values supported by the platform C :c:func:`localtime`
-   or :c:func:`gmtime` functions, and :exc:`OSError` on :c:func:`localtime` or
-   :c:func:`gmtime` failure. It's common for this to be restricted to years
-   between 1970 and 2038.
-
 
 .. function:: mktime(t)
 
@@ -277,7 +286,7 @@ Functions
    Return the value (in fractional seconds) of a monotonic clock, i.e. a clock
    that cannot go backwards.  The clock is not affected by system clock updates.
    The reference point of the returned value is undefined, so that only the
-   difference between the results of two calls is valid.
+   difference between the results of consecutive calls is valid.
 
    .. versionadded:: 3.3
    .. versionchanged:: 3.5
@@ -299,7 +308,7 @@ Functions
    clock with the highest available resolution to measure a short duration.  It
    does include time elapsed during sleep and is system-wide.  The reference
    point of the returned value is undefined, so that only the difference between
-   the results of two calls is valid.
+   the results of consecutive calls is valid.
 
    .. versionadded:: 3.3
 
@@ -321,7 +330,7 @@ Functions
    CPU time of the current process.  It does not include time elapsed during
    sleep.  It is process-wide by definition.  The reference point of the
    returned value is undefined, so that only the difference between the results
-   of two calls is valid.
+   of consecutive calls is valid.
 
    .. versionadded:: 3.3
 
@@ -440,10 +449,10 @@ Functions
    |           | negative time difference from UTC/GMT of the   |       |
    |           | form +HHMM or -HHMM, where H represents decimal|       |
    |           | hour digits and M represents decimal minute    |       |
-   |           | digits [-23:59, +23:59]. [1]_                  |       |
+   |           | digits [-23:59, +23:59].                       |       |
    +-----------+------------------------------------------------+-------+
    | ``%Z``    | Time zone name (no characters if no time zone  |       |
-   |           | exists). Deprecated. [1]_                      |       |
+   |           | exists).                                       |       |
    +-----------+------------------------------------------------+-------+
    | ``%%``    | A literal ``'%'`` character.                   |       |
    +-----------+------------------------------------------------+-------+
@@ -464,7 +473,7 @@ Functions
       calculations when the day of the week and the year are specified.
 
    Here is an example, a format for dates compatible with that specified  in the
-   :rfc:`2822` Internet email standard.  [1]_ ::
+   :rfc:`2822` Internet email standard.  [#]_ ::
 
       >>> from time import gmtime, strftime
       >>> strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
@@ -599,7 +608,7 @@ Functions
    CPU time of the current thread.  It does not include time elapsed during
    sleep.  It is thread-specific by definition.  The reference point of the
    returned value is undefined, so that only the difference between the results
-   of two calls in the same thread is valid.
+   of consecutive calls in the same thread is valid.
 
    .. availability::  Windows, Linux, Unix systems supporting
       ``CLOCK_THREAD_CPUTIME_ID``.
@@ -780,16 +789,6 @@ These constants are used as parameters for :func:`clock_getres` and
 
    .. versionadded:: 3.7
 
-.. data:: CLOCK_TAI
-
-   `International Atomic Time <https://www.nist.gov/pml/time-and-frequency-division/nist-time-frequently-asked-questions-faq#tai>`_
-
-   The system must have a current leap second table in order for this to give
-   the correct answer.  PTP or NTP software can maintain a leap second table.
-
-   .. availability:: Linux.
-
-   .. versionadded:: 3.9
 
 .. data:: CLOCK_THREAD_CPUTIME_ID
 
@@ -811,19 +810,8 @@ These constants are used as parameters for :func:`clock_getres` and
    .. versionadded:: 3.7
 
 
-.. data:: CLOCK_UPTIME_RAW
-
-   Clock that increments monotonically, tracking the time since an arbitrary
-   point, unaffected by frequency or time adjustments and not incremented while
-   the system is asleep.
-
-   .. availability:: macOS 10.12 and newer.
-
-   .. versionadded:: 3.8
-
 The following constant is the only parameter that can be sent to
 :func:`clock_settime`.
-
 
 .. data:: CLOCK_REALTIME
 
@@ -885,9 +873,10 @@ Timezone Constants
 
 .. rubric:: Footnotes
 
-.. [1] The use of ``%Z`` is now deprecated, but the ``%z`` escape that expands to the
-   preferred hour/minute offset is not supported by all ANSI C libraries. Also, a
+.. [#] The use of ``%Z`` is now deprecated, but the ``%z`` escape that expands to the
+   preferred  hour/minute offset is not supported by all ANSI C libraries. Also, a
    strict reading of the original 1982 :rfc:`822` standard calls for a two-digit
-   year (``%y`` rather than ``%Y``), but practice moved to 4-digit years long before the
+   year (%y rather than %Y), but practice moved to 4-digit years long before the
    year 2000.  After that, :rfc:`822` became obsolete and the 4-digit year has
    been first recommended by :rfc:`1123` and then mandated by :rfc:`2822`.
+

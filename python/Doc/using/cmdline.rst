@@ -1,4 +1,4 @@
-.. highlight:: sh
+.. highlightlang:: sh
 
 .. ATTENTION: You probably should update Misc/python.man, too, if you modify
    this file.
@@ -70,7 +70,6 @@ source.
    :data:`sys.path` (allowing modules in that directory to be imported as top
    level modules).
 
-   .. audit-event:: cpython.run_command command cmdoption-c
 
 .. cmdoption:: -m <module-name>
 
@@ -112,13 +111,12 @@ source.
        python -m timeit -s 'setup here' 'benchmarked code here'
        python -m timeit -h # for details
 
-   .. audit-event:: cpython.run_module module-name cmdoption-m
-
    .. seealso::
       :func:`runpy.run_module`
          Equivalent functionality directly available to Python code
 
       :pep:`338` -- Executing modules as scripts
+
 
    .. versionchanged:: 3.1
       Supply the package name to run a ``__main__`` submodule.
@@ -137,7 +135,6 @@ source.
    ``"-"`` and the current directory will be added to the start of
    :data:`sys.path`.
 
-   .. audit-event:: cpython.run_stdin "" ""
 
 .. _cmdarg-script:
 
@@ -163,8 +160,6 @@ source.
    :data:`sys.path` contains neither the script's directory nor the user's
    site-packages directory. All :envvar:`PYTHON*` environment variables are
    ignored, too.
-
-   .. audit-event:: cpython.run_file filename
 
    .. seealso::
       :func:`runpy.run_path`
@@ -200,13 +195,13 @@ Generic options
 
    .. code-block:: none
 
-       Python 3.8.0b2+
+       Python 3.7.0b2+
 
    When given twice, print more information about the build, like:
 
    .. code-block:: none
 
-       Python 3.8.0b2+ (3.8:0c076caaa8, Apr 20 2019, 21:55:00)
+       Python 3.7.0b2+ (3.7:0c076caaa8, Sep 22 2018, 12:04:24)
        [GCC 6.2.0 20161005]
 
    .. versionadded:: 3.6
@@ -315,14 +310,14 @@ Miscellaneous options
    randomization is enabled by default.
 
    On previous versions of Python, this option turns on hash randomization,
-   so that the :meth:`__hash__` values of str and bytes objects
+   so that the :meth:`__hash__` values of str, bytes and datetime
    are "salted" with an unpredictable random value.  Although they remain
    constant within an individual Python process, they are not predictable
    between repeated invocations of Python.
 
    Hash randomization is intended to provide protection against a
    denial-of-service caused by carefully-chosen inputs that exploit the worst
-   case performance of a dict construction, O(n\ :sup:`2`) complexity.  See
+   case performance of a dict construction, O(n^2) complexity.  See
    http://www.ocert.org/advisories/ocert-2011-003.html for details.
 
    :envvar:`PYTHONHASHSEED` allows you to set a fixed value for the hash
@@ -426,8 +421,6 @@ Miscellaneous options
    defines the following possible values:
 
    * ``-X faulthandler`` to enable :mod:`faulthandler`;
-   * ``-X oldparser``: enable the traditional LL(1) parser.  See also
-     :envvar:`PYTHONOLDPARSER` and :pep:`617`.
    * ``-X showrefcount`` to output the total reference count and number of used
      memory blocks when the program finishes or after each statement in the
      interactive interpreter. This only works on debug builds.
@@ -436,21 +429,32 @@ Miscellaneous options
      stored in a traceback of a trace. Use ``-X tracemalloc=NFRAME`` to start
      tracing with a traceback limit of *NFRAME* frames. See the
      :func:`tracemalloc.start` for more information.
+   * ``-X showalloccount`` to output the total count of allocated objects for
+     each type when the program finishes. This only works when Python was built with
+     ``COUNT_ALLOCS`` defined.
    * ``-X importtime`` to show how long each import takes. It shows module
      name, cumulative time (including nested imports) and self time (excluding
      nested imports).  Note that its output may be broken in multi-threaded
      application.  Typical usage is ``python3 -X importtime -c 'import
      asyncio'``.  See also :envvar:`PYTHONPROFILEIMPORTTIME`.
-   * ``-X dev``: enable :ref:`Python Development Mode <devmode>`, introducing
-     additional runtime checks that are too expensive to be enabled by
-     default.
+   * ``-X dev``: enable CPython's "development mode", introducing additional
+     runtime checks which are too expensive to be enabled by default. It should
+     not be more verbose than the default if the code is correct: new warnings
+     are only emitted when an issue is detected. Effect of the developer mode:
+
+     * Add ``default`` warning filter, as :option:`-W` ``default``.
+     * Install debug hooks on memory allocators: see the
+       :c:func:`PyMem_SetupDebugHooks` C function.
+     * Enable the :mod:`faulthandler` module to dump the Python traceback
+       on a crash.
+     * Enable :ref:`asyncio debug mode <asyncio-debug-mode>`.
+     * Set the :attr:`~sys.flags.dev_mode` attribute of :attr:`sys.flags` to
+       ``True``.
+
    * ``-X utf8`` enables UTF-8 mode for operating system interfaces, overriding
      the default locale-aware mode. ``-X utf8=0`` explicitly disables UTF-8
      mode (even when it would otherwise activate automatically).
      See :envvar:`PYTHONUTF8` for more details.
-   * ``-X pycache_prefix=PATH`` enables writing ``.pyc`` files to a parallel
-     tree rooted at the given directory instead of to the code tree. See also
-     :envvar:`PYTHONPYCACHEPREFIX`.
 
    It also allows passing arbitrary values and retrieving them through the
    :data:`sys._xoptions` dictionary.
@@ -469,19 +473,6 @@ Miscellaneous options
 
    .. versionadded:: 3.7
       The ``-X importtime``, ``-X dev`` and ``-X utf8`` options.
-
-   .. versionadded:: 3.8
-      The ``-X pycache_prefix`` option. The ``-X dev`` option now logs
-      ``close()`` exceptions in :class:`io.IOBase` destructor.
-
-   .. versionchanged:: 3.9
-      Using ``-X dev`` option, check *encoding* and *errors* arguments on
-      string encoding and decoding operations.
-
-      The ``-X showalloccount`` option has been removed.
-
-   .. deprecated-removed:: 3.9 3.10
-      The ``-X oldparser`` option.
 
 
 Options you shouldn't use
@@ -538,14 +529,6 @@ conflict.
    within a Python program as the variable :data:`sys.path`.
 
 
-.. envvar:: PYTHONPLATLIBDIR
-
-   If this is set to a non-empty string, it overrides the :data:`sys.platlibdir`
-   value.
-
-   .. versionadded:: 3.9
-
-
 .. envvar:: PYTHONSTARTUP
 
    If this is the name of a readable file, the Python commands in that file are
@@ -554,11 +537,6 @@ conflict.
    that objects defined or imported in it can be used without qualification in
    the interactive session.  You can also change the prompts :data:`sys.ps1` and
    :data:`sys.ps2` and the hook :data:`sys.__interactivehook__` in this file.
-
-   .. audit-event:: cpython.run_startup filename envvar-PYTHONSTARTUP
-
-      Raises an :ref:`auditing event <auditing>` ``cpython.run_startup`` with
-      the filename as the argument when called on startup.
 
 
 .. envvar:: PYTHONOPTIMIZE
@@ -587,15 +565,6 @@ conflict.
    :option:`-d` multiple times.
 
 
-.. envvar:: PYTHONOLDPARSER
-
-   If this is set to a non-empty string, enable the traditional LL(1) parser.
-
-   See also the :option:`-X` ``oldparser`` option and :pep:`617`.
-
-   .. deprecated-removed:: 3.9 3.10
-
-
 .. envvar:: PYTHONINSPECT
 
    If this is set to a non-empty string it is equivalent to specifying the
@@ -621,7 +590,7 @@ conflict.
 .. envvar:: PYTHONCASEOK
 
    If this is set, Python ignores case in :keyword:`import` statements.  This
-   only works on Windows and macOS.
+   only works on Windows and OS X.
 
 
 .. envvar:: PYTHONDONTWRITEBYTECODE
@@ -631,20 +600,10 @@ conflict.
    specifying the :option:`-B` option.
 
 
-.. envvar:: PYTHONPYCACHEPREFIX
-
-   If this is set, Python will write ``.pyc`` files in a mirror directory tree
-   at this path, instead of in ``__pycache__`` directories within the source
-   tree. This is equivalent to specifying the :option:`-X`
-   ``pycache_prefix=PATH`` option.
-
-   .. versionadded:: 3.8
-
-
 .. envvar:: PYTHONHASHSEED
 
    If this variable is not set or set to ``random``, a random value is used
-   to seed the hashes of str and bytes objects.
+   to seed the hashes of str, bytes and datetime objects.
 
    If :envvar:`PYTHONHASHSEED` is set to an integer value, it is used as a fixed
    seed for generating the hash() of the types covered by the hash
@@ -704,7 +663,7 @@ conflict.
 
    If this environment variable is set, ``sys.argv[0]`` will be set to its
    value instead of the value got through the C runtime.  Only works on
-   macOS.
+   Mac OS X.
 
 .. envvar:: PYTHONWARNINGS
 
@@ -896,9 +855,8 @@ conflict.
 
 .. envvar:: PYTHONDEVMODE
 
-   If this environment variable is set to a non-empty string, enable
-   :ref:`Python Development Mode <devmode>`, introducing additional runtime
-   checks that are too expensive to be enabled by default.
+   If this environment variable is set to a non-empty string, enable the
+   CPython "development mode". See the :option:`-X` ``dev`` option.
 
    .. versionadded:: 3.7
 
@@ -957,18 +915,15 @@ conflict.
 Debug-mode variables
 ~~~~~~~~~~~~~~~~~~~~
 
-Setting these variables only has an effect in a debug build of Python.
+Setting these variables only has an effect in a debug build of Python, that is,
+if Python was configured with the ``--with-pydebug`` build option.
 
 .. envvar:: PYTHONTHREADDEBUG
 
    If set, Python will print threading debug info.
-
-   Need Python configured with the ``--with-pydebug`` build option.
 
 
 .. envvar:: PYTHONDUMPREFS
 
    If set, Python will dump objects and reference counts still alive after
    shutting down the interpreter.
-
-   Need Python configured with the ``--with-trace-refs`` build option.

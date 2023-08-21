@@ -11,13 +11,10 @@ import os
 import errno
 import threading
 
-import unittest
 from unittest import TestCase, skipUnless
 from test import support as test_support
-from test.support import hashlib_helper
-from test.support import socket_helper
 
-HOST = socket_helper.HOST
+HOST = test_support.HOST
 PORT = 0
 
 SUPPORTS_SSL = False
@@ -258,8 +255,7 @@ class TestPOP3Class(TestCase):
     def setUp(self):
         self.server = DummyPOP3Server((HOST, PORT))
         self.server.start()
-        self.client = poplib.POP3(self.server.host, self.server.port,
-                                  timeout=test_support.LOOPBACK_TIMEOUT)
+        self.client = poplib.POP3(self.server.host, self.server.port, timeout=3)
 
     def tearDown(self):
         self.client.close()
@@ -313,11 +309,9 @@ class TestPOP3Class(TestCase):
     def test_rpop(self):
         self.assertOK(self.client.rpop('foo'))
 
-    @hashlib_helper.requires_hashdigest('md5', openssl=True)
     def test_apop_normal(self):
         self.assertOK(self.client.apop('foo', 'dummypassword'))
 
-    @hashlib_helper.requires_hashdigest('md5', openssl=True)
     def test_apop_REDOS(self):
         # Replace welcome with very long evil welcome.
         # NB The upper bound on welcome length is currently 2048.
@@ -380,8 +374,7 @@ class TestPOP3Class(TestCase):
         self.assertEqual(ctx.check_hostname, True)
         with self.assertRaises(ssl.CertificateError):
             resp = self.client.stls(context=ctx)
-        self.client = poplib.POP3("localhost", self.server.port,
-                                  timeout=test_support.LOOPBACK_TIMEOUT)
+        self.client = poplib.POP3("localhost", self.server.port, timeout=3)
         resp = self.client.stls(context=ctx)
         self.assertEqual(resp, expected)
 
@@ -450,8 +443,7 @@ class TestPOP3_TLSClass(TestPOP3Class):
     def setUp(self):
         self.server = DummyPOP3Server((HOST, PORT))
         self.server.start()
-        self.client = poplib.POP3(self.server.host, self.server.port,
-                                  timeout=test_support.LOOPBACK_TIMEOUT)
+        self.client = poplib.POP3(self.server.host, self.server.port, timeout=3)
         self.client.stls()
 
     def tearDown(self):
@@ -483,8 +475,8 @@ class TestTimeouts(TestCase):
         self.evt = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(60)  # Safety net. Look issue 11812
-        self.port = socket_helper.bind_port(self.sock)
-        self.thread = threading.Thread(target=self.server, args=(self.evt, self.sock))
+        self.port = test_support.bind_port(self.sock)
+        self.thread = threading.Thread(target=self.server, args=(self.evt,self.sock))
         self.thread.daemon = True
         self.thread.start()
         self.evt.wait()
@@ -508,12 +500,12 @@ class TestTimeouts(TestCase):
 
     def testTimeoutDefault(self):
         self.assertIsNone(socket.getdefaulttimeout())
-        socket.setdefaulttimeout(test_support.LOOPBACK_TIMEOUT)
+        socket.setdefaulttimeout(30)
         try:
             pop = poplib.POP3(HOST, self.port)
         finally:
             socket.setdefaulttimeout(None)
-        self.assertEqual(pop.sock.gettimeout(), test_support.LOOPBACK_TIMEOUT)
+        self.assertEqual(pop.sock.gettimeout(), 30)
         pop.close()
 
     def testTimeoutNone(self):
@@ -527,17 +519,20 @@ class TestTimeouts(TestCase):
         pop.close()
 
     def testTimeoutValue(self):
-        pop = poplib.POP3(HOST, self.port, timeout=test_support.LOOPBACK_TIMEOUT)
-        self.assertEqual(pop.sock.gettimeout(), test_support.LOOPBACK_TIMEOUT)
+        pop = poplib.POP3(HOST, self.port, timeout=30)
+        self.assertEqual(pop.sock.gettimeout(), 30)
         pop.close()
-        with self.assertRaises(ValueError):
-            poplib.POP3(HOST, self.port, timeout=0)
 
 
-def setUpModule():
+def test_main():
+    tests = [TestPOP3Class, TestTimeouts,
+             TestPOP3_SSLClass, TestPOP3_TLSClass]
     thread_info = test_support.threading_setup()
-    unittest.addModuleCleanup(test_support.threading_cleanup, *thread_info)
+    try:
+        test_support.run_unittest(*tests)
+    finally:
+        test_support.threading_cleanup(*thread_info)
 
 
 if __name__ == '__main__':
-    unittest.main()
+    test_main()

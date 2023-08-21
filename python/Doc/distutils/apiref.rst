@@ -4,16 +4,6 @@
 API Reference
 *************
 
-.. seealso::
-
-   `New and changed setup.py arguments in setuptools`_
-      The ``setuptools`` project adds new capabilities to the ``setup`` function
-      and other APIs, makes the API consistent across different Python versions,
-      and is hence recommended over using ``distutils`` directly.
-
-.. _New and changed setup.py arguments in setuptools: https://setuptools.readthedocs.io/en/latest/setuptools.html#new-and-changed-setup-keywords
-
-.. include:: ./_setuptools_disclaimer.rst
 
 :mod:`distutils.core` --- Core Distutils functionality
 ======================================================
@@ -287,11 +277,6 @@ the full reference.
    |                        | simply skip the extension.     |                           |
    +------------------------+--------------------------------+---------------------------+
 
-   .. versionchanged:: 3.8
-
-      On Unix, C extensions are no longer linked to libpython except on
-      Android and Cygwin.
-
 
 .. class:: Distribution
 
@@ -373,7 +358,7 @@ This module provides the following functions.
    compiler object under Unix---if you supply a value for *compiler*, *plat* is
    ignored.
 
-   .. % Is the posix/nt only thing still true? macOS seems to work, and
+   .. % Is the posix/nt only thing still true? Mac OS X seems to work, and
    .. % returns a UnixCCompiler instance. How to document this... hmm.
 
 
@@ -1119,11 +1104,11 @@ other utility module.
 
    For non-POSIX platforms, currently just returns ``sys.platform``.
 
-   For macOS systems the OS version reflects the minimal version on which
+   For Mac OS X systems the OS version reflects the minimal version on which
    binaries will run (that is, the value of ``MACOSX_DEPLOYMENT_TARGET``
    during the build of Python), not the OS version of the current system.
 
-   For universal binary builds on macOS the architecture value reflects
+   For universal binary builds on Mac OS X the architecture value reflects
    the universal binary status instead of the architecture of the current
    processor. For 32-bit universal binaries the architecture is ``fat``,
    for 64-bit universal binaries the architecture is ``fat64``, and
@@ -1132,7 +1117,7 @@ other utility module.
    a 3-way universal build (ppc, i386, x86_64) and ``intel`` is used for
    a universal build with the i386 and x86_64 architectures
 
-   Examples of returned values on macOS:
+   Examples of returned values on Mac OS X:
 
    * ``macosx-10.3-ppc``
 
@@ -1141,24 +1126,6 @@ other utility module.
    * ``macosx-10.5-universal``
 
    * ``macosx-10.6-intel``
-
-   For AIX, Python 3.9 and later return a string starting with "aix", followed
-   by additional fields (separated by ``'-'``) that represent the combined
-   values of AIX Version, Release and Technology Level (first field), Build Date
-   (second field), and bit-size (third field). Python 3.8 and earlier returned
-   only a single additional field with the AIX Version and Release.
-
-   Examples of returned values on AIX:
-
-   * ``aix-5307-0747-32`` # 32-bit build on AIX ``oslevel -s``: 5300-07-00-0000
-
-   * ``aix-7105-1731-64`` # 64-bit build on AIX ``oslevel -s``: 7100-05-01-1731
-
-   * ``aix-7.2``          # Legacy form reported in Python 3.8 and earlier
-
-   .. versionchanged:: 3.9
-      The AIX platform string format now also includes the technology level,
-      build date, and ABI bit-size.
 
 
 .. function:: convert_path(pathname)
@@ -1427,11 +1394,11 @@ This module provides the :class:`FileList` class, used for poking about the
 filesystem and building lists of files.
 
 
-:mod:`distutils.log` --- Simple :pep:`282`-style logging
-========================================================
+:mod:`distutils.log` --- Simple PEP 282-style logging
+=====================================================
 
 .. module:: distutils.log
-   :synopsis: A simple logging mechanism, :pep:`282`-style
+   :synopsis: A simple logging mechanism, 282-style
 
 
 :mod:`distutils.spawn` --- Spawn a sub-process
@@ -1855,9 +1822,6 @@ Subclasses of :class:`Command` must define the following methods.
 
 .. class:: bdist_msi
 
-.. deprecated:: 3.9
-   Use bdist_wheel (wheel packages) instead.
-
    Builds a `Windows Installer`_ (.msi) binary package.
 
    .. _Windows Installer: https://msdn.microsoft.com/en-us/library/cc185688(VS.85).aspx
@@ -1883,9 +1847,6 @@ Subclasses of :class:`Command` must define the following methods.
 
 .. module:: distutils.command.bdist_wininst
    :synopsis: Build a Windows installer
-
-.. deprecated:: 3.8
-   Use bdist_wheel (wheel packages) instead.
 
 
 .. % todo

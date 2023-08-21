@@ -15,7 +15,6 @@ from distutils.errors import (
 
 import unittest
 from test import support
-from test.support.script_helper import assert_python_ok
 
 # http://bugs.python.org/issue4373
 # Don't load the xx module more than once.
@@ -27,8 +26,11 @@ class BuildExtTestCase(TempdirManager,
                        unittest.TestCase):
     def setUp(self):
         # Create a simple test environment
+        # Note that we're making changes to sys.path
         super(BuildExtTestCase, self).setUp()
         self.tmp_dir = self.mkdtemp()
+        self.sys_path = sys.path, sys.path[:]
+        sys.path.append(self.tmp_dir)
         import site
         self.old_user_base = site.USER_BASE
         site.USER_BASE = self.mkdtemp()
@@ -38,11 +40,15 @@ class BuildExtTestCase(TempdirManager,
         # bpo-30132: On Windows, a .pdb file may be created in the current
         # working directory. Create a temporary working directory to cleanup
         # everything at the end of the test.
-        change_cwd = support.change_cwd(self.tmp_dir)
-        change_cwd.__enter__()
-        self.addCleanup(change_cwd.__exit__, None, None, None)
+        self.temp_cwd = support.temp_cwd()
+        self.temp_cwd.__enter__()
+        self.addCleanup(self.temp_cwd.__exit__, None, None, None)
 
     def tearDown(self):
+        # Get everything back to normal
+        support.unload('xx')
+        sys.path = self.sys_path[0]
+        sys.path[:] = self.sys_path[1]
         import site
         site.USER_BASE = self.old_user_base
         from distutils.command import build_ext
@@ -82,34 +88,19 @@ class BuildExtTestCase(TempdirManager,
         else:
             ALREADY_TESTED = type(self).__name__
 
-        code = textwrap.dedent(f"""
-            tmp_dir = {self.tmp_dir!r}
+        import xx
 
-            import sys
-            import unittest
-            from test import support
+        for attr in ('error', 'foo', 'new', 'roj'):
+            self.assertTrue(hasattr(xx, attr))
 
-            sys.path.insert(0, tmp_dir)
-            import xx
-
-            class Tests(unittest.TestCase):
-                def test_xx(self):
-                    for attr in ('error', 'foo', 'new', 'roj'):
-                        self.assertTrue(hasattr(xx, attr))
-
-                    self.assertEqual(xx.foo(2, 5), 7)
-                    self.assertEqual(xx.foo(13,15), 28)
-                    self.assertEqual(xx.new().demo(), None)
-                    if support.HAVE_DOCSTRINGS:
-                        doc = 'This is a template module just for instruction.'
-                        self.assertEqual(xx.__doc__, doc)
-                    self.assertIsInstance(xx.Null(), xx.Null)
-                    self.assertIsInstance(xx.Str(), xx.Str)
-
-
-            unittest.main()
-        """)
-        assert_python_ok('-c', code)
+        self.assertEqual(xx.foo(2, 5), 7)
+        self.assertEqual(xx.foo(13,15), 28)
+        self.assertEqual(xx.new().demo(), None)
+        if support.HAVE_DOCSTRINGS:
+            doc = 'This is a template module just for instruction.'
+            self.assertEqual(xx.__doc__, doc)
+        self.assertIsInstance(xx.Null(), xx.Null)
+        self.assertIsInstance(xx.Str(), xx.Str)
 
     def test_solaris_enable_shared(self):
         dist = Distribution({'name': 'xx'})
@@ -304,19 +295,6 @@ class BuildExtTestCase(TempdirManager,
         cmd.ensure_finalized()
         self.assertEqual(cmd.get_source_files(), ['xxx'])
 
-    def test_unicode_module_names(self):
-        modules = [
-            Extension('foo', ['aaa'], optional=False),
-            Extension('föö', ['uuu'], optional=False),
-        ]
-        dist = Distribution({'name': 'xx', 'ext_modules': modules})
-        cmd = self.build_ext(dist)
-        cmd.ensure_finalized()
-        self.assertRegex(cmd.get_ext_filename(modules[0].name), r'foo(_d)?\..*')
-        self.assertRegex(cmd.get_ext_filename(modules[1].name), r'föö(_d)?\..*')
-        self.assertEqual(cmd.get_export_symbols(modules[0]), ['PyInit_foo'])
-        self.assertEqual(cmd.get_export_symbols(modules[1]), ['PyInitU_f_gkaa'])
-
     def test_compiler_option(self):
         # cmd.compiler is an option and
         # should not be overridden by a compiler instance
@@ -497,11 +475,7 @@ class BuildExtTestCase(TempdirManager,
             target = '%02d%01d0' % target
         else:
             # for 10.10 and beyond -> "10nn00"
-            if len(target) >= 2:
-                target = '%02d%02d00' % target
-            else:
-                # 11 and later can have no minor version (11 instead of 11.0)
-                target = '%02d0000' % target
+            target = '%02d%02d00' % target
         deptarget_ext = Extension(
             'deptarget',
             [deptarget_c],

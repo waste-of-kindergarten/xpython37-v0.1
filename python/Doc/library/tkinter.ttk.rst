@@ -759,7 +759,7 @@ ones inherited from :class:`ttk.Widget`.
 Platform-specific notes
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-* On macOS, toplevel windows automatically include a built-in size grip
+* On MacOS X, toplevel windows automatically include a built-in size grip
   by default. Adding a :class:`Sizegrip` is harmless, since the built-in
   grip will just mask the widget.
 
@@ -1175,13 +1175,14 @@ ttk.Treeview
       the tree.
 
 
-   .. method:: selection()
+   .. method:: selection(selop=None, items=None)
 
-      Returns a tuple of selected items.
+      If *selop* is not specified, returns selected items. Otherwise, it will
+      act according to the following selection methods.
 
-      .. versionchanged:: 3.8
-         ``selection()`` no longer takes arguments.  For changing the selection
-         state use the following selection methods.
+      .. deprecated-removed:: 3.6 3.8
+         Using ``selection()`` for changing the selection state is deprecated.
+         Use the following selection methods instead.
 
 
    .. method:: selection_set(*items)

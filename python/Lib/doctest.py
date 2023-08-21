@@ -1022,8 +1022,10 @@ class DocTestFinder:
         if inspect.isclass(obj) and self._recurse:
             for valname, val in obj.__dict__.items():
                 # Special handling for staticmethod/classmethod.
-                if isinstance(val, (staticmethod, classmethod)):
-                    val = val.__func__
+                if isinstance(val, staticmethod):
+                    val = getattr(obj, valname)
+                if isinstance(val, classmethod):
+                    val = getattr(obj, valname).__func__
 
                 # Recurse to methods, properties, and nested classes.
                 if ((inspect.isroutine(val) or inspect.isclass(val) or
@@ -1332,7 +1334,7 @@ class DocTestRunner:
             try:
                 # Don't blink!  This is where the user's code gets run.
                 exec(compile(example.source, filename, "single",
-                             compileflags, True), test.globs)
+                             compileflags, 1), test.globs)
                 self.debugger.set_continue() # ==== Example Finished ====
                 exception = None
             except KeyboardInterrupt:
@@ -2159,7 +2161,6 @@ class DocTestCase(unittest.TestCase):
         unittest.TestCase.__init__(self)
         self._dt_optionflags = optionflags
         self._dt_checker = checker
-        self._dt_globs = test.globs.copy()
         self._dt_test = test
         self._dt_setUp = setUp
         self._dt_tearDown = tearDown
@@ -2176,9 +2177,7 @@ class DocTestCase(unittest.TestCase):
         if self._dt_tearDown is not None:
             self._dt_tearDown(test)
 
-        # restore the original globs
         test.globs.clear()
-        test.globs.update(self._dt_globs)
 
     def runTest(self):
         test = self._dt_test
@@ -2309,7 +2308,7 @@ class DocTestCase(unittest.TestCase):
         name = self._dt_test.name.split('.')
         return "%s (%s)" % (name[-1], '.'.join(name[:-1]))
 
-    __str__ = object.__str__
+    __str__ = __repr__
 
     def shortDescription(self):
         return "Doctest: " + self._dt_test.name
@@ -2408,6 +2407,7 @@ class DocFileCase(DocTestCase):
 
     def __repr__(self):
         return self._dt_test.filename
+    __str__ = __repr__
 
     def format_failure(self, err):
         return ('Failed doctest test for %s\n  File "%s", line 0\n\n%s'

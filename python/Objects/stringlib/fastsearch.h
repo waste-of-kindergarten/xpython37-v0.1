@@ -4,8 +4,7 @@
 
 /* fast search/count implementation, based on a mix between boyer-
    moore and horspool, with a few more bells and whistles on the top.
-   for some more background, see:
-   https://web.archive.org/web/20201107074620/http://effbot.org/zone/stringlib.htm */
+   for some more background, see: http://effbot.org/zone/stringlib.htm */
 
 /* note: fastsearch may access s[n], which isn't a problem when using
    Python's ordinary string types, but may cause problems if you're
@@ -53,7 +52,7 @@ STRINGLIB(find_char)(const STRINGLIB_CHAR* s, Py_ssize_t n, STRINGLIB_CHAR ch)
             return (p - s);
         return -1;
 #else
-        /* use memchr if we can choose a needle without too many likely
+        /* use memchr if we can choose a needle without two many likely
            false positives */
         const STRINGLIB_CHAR *s1, *e1;
         unsigned char needle = ch & 0xff;
@@ -112,7 +111,7 @@ STRINGLIB(rfind_char)(const STRINGLIB_CHAR* s, Py_ssize_t n, STRINGLIB_CHAR ch)
             return (p - s);
         return -1;
 #else
-        /* use memrchr if we can choose a needle without too many likely
+        /* use memrchr if we can choose a needle without two many likely
            false positives */
         const STRINGLIB_CHAR *s1;
         Py_ssize_t n1;
@@ -193,6 +192,7 @@ FASTSEARCH(const STRINGLIB_CHAR* s, Py_ssize_t n,
                 }
             return count;
         }
+        return -1;
     }
 
     mlast = m - 1;

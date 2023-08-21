@@ -3,6 +3,7 @@
 # The code for testing gdb was adapted from similar work in Unladen Swallow's
 # Lib/test/test_jit_gdb.py
 
+import locale
 import os
 import platform
 import re
@@ -13,7 +14,7 @@ import textwrap
 import unittest
 
 from test import support
-from test.support import findfile, python_is_optimized
+from test.support import run_unittest, findfile, python_is_optimized
 
 def get_gdb_version():
     try:
@@ -39,8 +40,7 @@ def get_gdb_version():
     # 'GNU gdb (GDB) Fedora 7.9.1-17.fc22\n' -> 7.9
     # 'GNU gdb 6.1.1 [FreeBSD]\n' -> 6.1
     # 'GNU gdb (GDB) Fedora (7.5.1-37.fc18)\n' -> 7.5
-    # 'HP gdb 6.7 for HP Itanium (32 or 64 bit) and target HP-UX 11iv2 and 11iv3.\n' -> 6.7
-    match = re.search(r"^(?:GNU|HP) gdb.*?\b(\d+)\.(\d+)", version)
+    match = re.search(r"^GNU gdb.*?\b(\d+)\.(\d+)", version)
     if match is None:
         raise Exception("unable to parse GDB version: %r" % version)
     return (version, int(match.group(1)), int(match.group(2)))
@@ -58,10 +58,6 @@ if not sysconfig.is_python_build():
 if 'Clang' in platform.python_compiler() and sys.platform == 'darwin':
     raise unittest.SkipTest("test_gdb doesn't work correctly when python is"
                             " built with LLVM clang")
-
-if ((sysconfig.get_config_var('PGO_PROF_USE_FLAG') or 'xxx') in
-    (sysconfig.get_config_var('PY_CORE_CFLAGS') or '')):
-    raise unittest.SkipTest("test_gdb is not reliable on PGO builds")
 
 # Location of custom hooks file in a repository checkout.
 checkout_hook_path = os.path.join(os.path.dirname(sys.executable),
@@ -145,8 +141,7 @@ class DebuggerTests(unittest.TestCase):
     def get_stack_trace(self, source=None, script=None,
                         breakpoint=BREAKPOINT_FN,
                         cmds_after_breakpoint=None,
-                        import_site=False,
-                        ignore_stderr=False):
+                        import_site=False):
         '''
         Run 'python -c SOURCE' under gdb with a breakpoint.
 
@@ -225,9 +220,8 @@ class DebuggerTests(unittest.TestCase):
         # Use "args" to invoke gdb, capturing stdout, stderr:
         out, err = run_gdb(*args, PYTHONHASHSEED=PYTHONHASHSEED)
 
-        if not ignore_stderr:
-            for line in err.splitlines():
-                print(line, file=sys.stderr)
+        for line in err.splitlines():
+            print(line, file=sys.stderr)
 
         # bpo-34007: Sometimes some versions of the shared libraries that
         # are part of the traceback are compiled in optimised mode and the
@@ -373,6 +367,7 @@ class PrettyPrintTests(DebuggerTests):
         def check_repr(text):
             try:
                 text.encode(encoding)
+                printable = True
             except UnicodeEncodeError:
                 self.assertGdbRepr(text, ascii(text))
             else:
@@ -863,72 +858,34 @@ id(42)
                                           )
         self.assertIn('Garbage-collecting', gdb_output)
 
-
     @unittest.skipIf(python_is_optimized(),
                      "Python was compiled with optimizations")
     # Some older versions of gdb will fail with
     #  "Cannot find new threads: generic error"
     # unless we add LD_PRELOAD=PATH-TO-libpthread.so.1 as a workaround
-    #
-    # gdb will also generate many erroneous errors such as:
-    #     Function "meth_varargs" not defined.
-    # This is because we are calling functions from an "external" module
-    # (_testcapimodule) rather than compiled-in functions. It seems difficult
-    # to suppress these. See also the comment in DebuggerTests.get_stack_trace
     def test_pycfunction(self):
         'Verify that "py-bt" displays invocations of PyCFunction instances'
-        # Various optimizations multiply the code paths by which these are
-        # called, so test a variety of calling conventions.
-        for func_name, args, expected_frame in (
-            ('meth_varargs', '', 1),
-            ('meth_varargs_keywords', '', 1),
-            ('meth_o', '[]', 1),
-            ('meth_noargs', '', 1),
-            ('meth_fastcall', '', 1),
-            ('meth_fastcall_keywords', '', 1),
-        ):
-            for obj in (
-                '_testcapi',
-                '_testcapi.MethClass',
-                '_testcapi.MethClass()',
-                '_testcapi.MethStatic()',
+        # Tested function must not be defined with METH_NOARGS or METH_O,
+        # otherwise call_function() doesn't call PyCFunction_Call()
+        cmd = ('from time import gmtime\n'
+               'def foo():\n'
+               '    gmtime(1)\n'
+               'def bar():\n'
+               '    foo()\n'
+               'bar()\n')
+        # Verify with "py-bt":
+        gdb_output = self.get_stack_trace(cmd,
+                                          breakpoint='time_gmtime',
+                                          cmds_after_breakpoint=['bt', 'py-bt'],
+                                          )
+        self.assertIn('<built-in method gmtime', gdb_output)
 
-                # XXX: bound methods don't yet give nice tracebacks
-                # '_testcapi.MethInstance()',
-            ):
-                with self.subTest(f'{obj}.{func_name}'):
-                    cmd = textwrap.dedent(f'''
-                        import _testcapi
-                        def foo():
-                            {obj}.{func_name}({args})
-                        def bar():
-                            foo()
-                        bar()
-                    ''')
-                    # Verify with "py-bt":
-                    gdb_output = self.get_stack_trace(
-                        cmd,
-                        breakpoint=func_name,
-                        cmds_after_breakpoint=['bt', 'py-bt'],
-                        # bpo-45207: Ignore 'Function "meth_varargs" not
-                        # defined.' message in stderr.
-                        ignore_stderr=True,
-                    )
-                    self.assertIn(f'<built-in method {func_name}', gdb_output)
-
-                    # Verify with "py-bt-full":
-                    gdb_output = self.get_stack_trace(
-                        cmd,
-                        breakpoint=func_name,
-                        cmds_after_breakpoint=['py-bt-full'],
-                        # bpo-45207: Ignore 'Function "meth_varargs" not
-                        # defined.' message in stderr.
-                        ignore_stderr=True,
-                    )
-                    self.assertIn(
-                        f'#{expected_frame} <built-in method {func_name}',
-                        gdb_output,
-                    )
+        # Verify with "py-bt-full":
+        gdb_output = self.get_stack_trace(cmd,
+                                          breakpoint='time_gmtime',
+                                          cmds_after_breakpoint=['py-bt-full'],
+                                          )
+        self.assertIn('#2 <built-in method gmtime', gdb_output)
 
     @unittest.skipIf(python_is_optimized(),
                      "Python was compiled with optimizations")
@@ -954,31 +911,6 @@ id(42)
                                           cmds_after_breakpoint=cmds_after_breakpoint)
         self.assertRegex(gdb_output,
                          r"<method-wrapper u?'__init__' of MyList object at ")
-
-    @unittest.skipIf(python_is_optimized(),
-                     "Python was compiled with optimizations")
-    def test_try_finally_lineno(self):
-        cmd = textwrap.dedent('''
-            def foo(x):
-                try:
-                    raise RuntimeError("error")
-                    return x
-                except:
-                    id("break point")
-                finally:
-                    x += 2
-                return x
-            r = foo(3)
-        ''')
-        gdb_output = self.get_stack_trace(cmd,
-                                          cmds_after_breakpoint=["py-bt"])
-        self.assertMultilineMatches(gdb_output,
-                                    r'''^.*
-Traceback \(most recent call first\):
-  <built-in method id of module object .*>
-  File "<string>", line 7, in foo
-  File "<string>", line 11, in <module>
-''')
 
 
 class PyPrintTests(DebuggerTests):
@@ -1034,13 +966,18 @@ class PyLocalsTests(DebuggerTests):
         self.assertMultilineMatches(bt,
                                     r".*\na = 1\nb = 2\nc = 3\n.*")
 
-
-def setUpModule():
+def test_main():
     if support.verbose:
         print("GDB version %s.%s:" % (gdb_major_version, gdb_minor_version))
         for line in gdb_version.splitlines():
             print(" " * 4 + line)
-
+    run_unittest(PrettyPrintTests,
+                 PyListTests,
+                 StackNavigationTests,
+                 PyBtTests,
+                 PyPrintTests,
+                 PyLocalsTests
+                 )
 
 if __name__ == "__main__":
-    unittest.main()
+    test_main()

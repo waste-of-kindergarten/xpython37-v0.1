@@ -34,7 +34,7 @@ Dynamic Type Creation
    freshly created class namespace. It should accept the class namespace
    as its sole argument and update the namespace directly with the class
    contents. If no callback is provided, it has the same effect as passing
-   in ``lambda ns: None``.
+   in ``lambda ns: ns``.
 
    .. versionadded:: 3.3
 
@@ -98,9 +98,6 @@ the types that arise only incidentally during processing such as the
 Typical use of these names is for :func:`isinstance` or
 :func:`issubclass` checks.
 
-
-If you instantiate any of these types, note that signatures may vary between Python versions.
-
 Standard names are defined for the following types:
 
 .. data:: FunctionType
@@ -108,11 +105,6 @@ Standard names are defined for the following types:
 
    The type of user-defined functions and functions created by
    :keyword:`lambda`  expressions.
-
-   .. audit-event:: function.__new__ code types.FunctionType
-
-   The audit event only occurs for direct instantiation of function objects,
-   and is not raised for normal compilation.
 
 
 .. data:: GeneratorType
@@ -137,30 +129,11 @@ Standard names are defined for the following types:
    .. versionadded:: 3.6
 
 
-.. class:: CodeType(**kwargs)
+.. data:: CodeType
 
    .. index:: builtin: compile
 
    The type for code objects such as returned by :func:`compile`.
-
-   .. audit-event:: code.__new__ code,filename,name,argcount,posonlyargcount,kwonlyargcount,nlocals,stacksize,flags types.CodeType
-
-   Note that the audited arguments may not match the names or positions
-   required by the initializer.  The audit event only occurs for direct
-   instantiation of code objects, and is not raised for normal compilation.
-
-   .. method:: CodeType.replace(**kwargs)
-
-     Return a copy of the code object with new values for the specified fields.
-
-     .. versionadded:: 3.8
-
-.. data:: CellType
-
-   The type for cell objects: such objects are used as containers for
-   a function's free variables.
-
-   .. versionadded:: 3.8
 
 
 .. data:: MethodType
@@ -209,7 +182,7 @@ Standard names are defined for the following types:
 
 .. class:: ModuleType(name, doc=None)
 
-   The type of :term:`modules <module>`. The constructor takes the name of the
+   The type of :term:`modules <module>`. Constructor takes the name of the
    module to be created and optionally its :term:`docstring`.
 
    .. note::
@@ -224,23 +197,12 @@ Standard names are defined for the following types:
 
       The :term:`loader` which loaded the module. Defaults to ``None``.
 
-      This attribute is to match :attr:`importlib.machinery.ModuleSpec.loader`
-      as stored in the attr:`__spec__` object.
-
-      .. note::
-         A future version of Python may stop setting this attribute by default.
-         To guard against this potential change, preferably read from the
-         :attr:`__spec__` attribute instead or use
-         ``getattr(module, "__loader__", None)`` if you explicitly need to use
-         this attribute.
-
       .. versionchanged:: 3.4
          Defaults to ``None``. Previously the attribute was optional.
 
    .. attribute:: __name__
 
-      The name of the module. Expected to match
-      :attr:`importlib.machinery.ModuleSpec.name`.
+      The name of the module.
 
    .. attribute:: __package__
 
@@ -249,47 +211,8 @@ Standard names are defined for the following types:
       to ``''``, else it should be set to the name of the package (which can be
       :attr:`__name__` if the module is a package itself). Defaults to ``None``.
 
-      This attribute is to match :attr:`importlib.machinery.ModuleSpec.parent`
-      as stored in the attr:`__spec__` object.
-
-      .. note::
-         A future version of Python may stop setting this attribute by default.
-         To guard against this potential change, preferably read from the
-         :attr:`__spec__` attribute instead or use
-         ``getattr(module, "__package__", None)`` if you explicitly need to use
-         this attribute.
-
       .. versionchanged:: 3.4
          Defaults to ``None``. Previously the attribute was optional.
-
-   .. attribute:: __spec__
-
-      A record of the module's import-system-related state. Expected to be an
-      instance of :class:`importlib.machinery.ModuleSpec`.
-
-      .. versionadded:: 3.4
-
-
-.. class:: GenericAlias(t_origin, t_args)
-
-   The type of :ref:`parameterized generics <types-genericalias>` such as
-   ``list[int]``.
-
-   ``t_origin`` should be a non-parameterized generic class, such as ``list``,
-   ``tuple`` or ``dict``.  ``t_args`` should be a :class:`tuple` (possibly of
-   length 1) of types which parameterize ``t_origin``::
-
-      >>> from types import GenericAlias
-
-      >>> list[int] == GenericAlias(list, (int,))
-      True
-      >>> dict[str, int] == GenericAlias(dict, (str, int))
-      True
-
-   .. versionadded:: 3.9
-
-   .. versionchanged:: 3.9.2
-      This type can now be subclassed.
 
 
 .. class:: TracebackType(tb_next, tb_frame, tb_lasti, tb_lineno)
@@ -338,11 +261,6 @@ Standard names are defined for the following types:
 
    .. versionadded:: 3.3
 
-   .. versionchanged:: 3.9
-
-      Updated to support the new union (``|``) operator from :pep:`584`, which
-      simply delegates to the underlying mapping.
-
    .. describe:: key in proxy
 
       Return ``True`` if the underlying mapping has a key *key*, else
@@ -385,12 +303,6 @@ Standard names are defined for the following types:
 
       Return a new view of the underlying mapping's values.
 
-   .. describe:: reversed(proxy)
-
-      Return a reverse iterator over the keys of the underlying mapping.
-
-      .. versionadded:: 3.9
-
 
 Additional Utility Classes and Functions
 ----------------------------------------
@@ -407,17 +319,16 @@ Additional Utility Classes and Functions
    The type is roughly equivalent to the following code::
 
        class SimpleNamespace:
-           def __init__(self, /, **kwargs):
+           def __init__(self, **kwargs):
                self.__dict__.update(kwargs)
 
            def __repr__(self):
-               items = (f"{k}={v!r}" for k, v in self.__dict__.items())
+               keys = sorted(self.__dict__)
+               items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
                return "{}({})".format(type(self).__name__, ", ".join(items))
 
            def __eq__(self, other):
-               if isinstance(self, SimpleNamespace) and isinstance(other, SimpleNamespace):
-                  return self.__dict__ == other.__dict__
-               return NotImplemented
+               return self.__dict__ == other.__dict__
 
    ``SimpleNamespace`` may be useful as a replacement for ``class NS: pass``.
    However, for a structured record type use :func:`~collections.namedtuple`
@@ -425,9 +336,6 @@ Additional Utility Classes and Functions
 
    .. versionadded:: 3.3
 
-   .. versionchanged:: 3.9
-      Attribute order in the repr changed from alphabetical to insertion (like
-      ``dict``).
 
 .. function:: DynamicClassAttribute(fget=None, fset=None, fdel=None, doc=None)
 
@@ -439,7 +347,7 @@ Additional Utility Classes and Functions
    class's __getattr__ method; this is done by raising AttributeError.
 
    This allows one to have properties active on an instance, and have virtual
-   attributes on the class with the same name (see :class:`enum.Enum` for an example).
+   attributes on the class with the same name (see Enum for an example).
 
    .. versionadded:: 3.4
 

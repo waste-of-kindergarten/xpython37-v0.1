@@ -1,4 +1,4 @@
-.. highlight:: c
+.. highlightlang:: c
 
 .. _supporting-cycle-detection:
 
@@ -33,26 +33,6 @@ Constructors for container types must conform to two rules:
 #. Once all the fields which may contain references to other containers are
    initialized, it must call :c:func:`PyObject_GC_Track`.
 
-Similarly, the deallocator for the object must conform to a similar pair of
-rules:
-
-#. Before fields which refer to other containers are invalidated,
-   :c:func:`PyObject_GC_UnTrack` must be called.
-
-#. The object's memory must be deallocated using :c:func:`PyObject_GC_Del`.
-
-   .. warning::
-      If a type adds the Py_TPFLAGS_HAVE_GC, then it *must* implement at least
-      a :c:member:`~PyTypeObject.tp_traverse` handler or explicitly use one
-      from its subclass or subclasses.
-
-      When calling :c:func:`PyType_Ready` or some of the APIs that indirectly
-      call it like :c:func:`PyType_FromSpecWithBases` or
-      :c:func:`PyType_FromSpec` the interpreter will automatically populate the
-      :c:member:`~PyTypeObject.tp_flags`, :c:member:`~PyTypeObject.tp_traverse`
-      and :c:member:`~PyTypeObject.tp_clear` fields if the type inherits from a
-      class that implements the garbage collector protocol and the child class
-      does *not* include the :const:`Py_TPFLAGS_HAVE_GC` flag.
 
 .. c:function:: TYPE* PyObject_GC_New(TYPE, PyTypeObject *type)
 
@@ -81,32 +61,21 @@ rules:
    end of the constructor.
 
 
-.. c:function:: int PyObject_IS_GC(PyObject *obj)
+.. c:function:: void _PyObject_GC_TRACK(PyObject *op)
 
-   Returns non-zero if the object implements the garbage collector protocol,
-   otherwise returns 0.
+   A macro version of :c:func:`PyObject_GC_Track`.  It should not be used for
+   extension modules.
 
-   The object cannot be tracked by the garbage collector if this function returns 0.
+   .. deprecated:: 3.6
+      This macro is removed from Python 3.8.
 
+Similarly, the deallocator for the object must conform to a similar pair of
+rules:
 
-.. c:function:: int PyObject_GC_IsTracked(PyObject *op)
+#. Before fields which refer to other containers are invalidated,
+   :c:func:`PyObject_GC_UnTrack` must be called.
 
-   Returns 1 if the object type of *op* implements the GC protocol and *op* is being
-   currently tracked by the garbage collector and 0 otherwise.
-
-   This is analogous to the Python function :func:`gc.is_tracked`.
-
-   .. versionadded:: 3.9
-
-
-.. c:function:: int PyObject_GC_IsFinalized(PyObject *op)
-
-   Returns 1 if the object type of *op* implements the GC protocol and *op* has been
-   already finalized by the garbage collector and 0 otherwise.
-
-   This is analogous to the Python function :func:`gc.is_finalized`.
-
-   .. versionadded:: 3.9
+#. The object's memory must be deallocated using :c:func:`PyObject_GC_Del`.
 
 
 .. c:function:: void PyObject_GC_Del(void *op)
@@ -124,10 +93,13 @@ rules:
    the fields used by the :c:member:`~PyTypeObject.tp_traverse` handler become invalid.
 
 
-.. versionchanged:: 3.8
+.. c:function:: void _PyObject_GC_UNTRACK(PyObject *op)
 
-   The :c:func:`_PyObject_GC_TRACK` and :c:func:`_PyObject_GC_UNTRACK` macros
-   have been removed from the public C API.
+   A macro version of :c:func:`PyObject_GC_UnTrack`.  It should not be used for
+   extension modules.
+
+   .. deprecated:: 3.6
+      This macro is removed from Python 3.8.
 
 The :c:member:`~PyTypeObject.tp_traverse` handler accepts a function parameter of this type:
 

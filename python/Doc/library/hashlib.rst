@@ -67,7 +67,7 @@ Constructors for hash algorithms that are always present in this module are
 :func:`sha1`, :func:`sha224`, :func:`sha256`, :func:`sha384`,
 :func:`sha512`, :func:`blake2b`, and :func:`blake2s`.
 :func:`md5` is normally available as well, though it
-may be missing or blocked if you are using a rare "FIPS compliant" build of Python.
+may be missing if you are using a rare "FIPS compliant" build of Python.
 Additional algorithms may also be available depending upon the OpenSSL
 library that Python uses on your platform. On most platforms the
 :func:`sha3_224`, :func:`sha3_256`, :func:`sha3_384`, :func:`sha3_512`,
@@ -79,17 +79,6 @@ library that Python uses on your platform. On most platforms the
 
 .. versionadded:: 3.6
    :func:`blake2b` and :func:`blake2s` were added.
-
-.. _hashlib-usedforsecurity:
-
-.. versionchanged:: 3.9
-   All hashlib constructors take a keyword-only argument *usedforsecurity*
-   with default value ``True``. A false value allows the use of insecure and
-   blocked hashing algorithms in restricted environments. ``False`` indicates
-   that the hashing algorithm is not used in a security context, e.g. as a
-   non-cryptographic one-way compression function.
-
-   Hashlib now uses SHA3 and SHAKE from OpenSSL 1.1.1 and newer.
 
 For example, to obtain the digest of the byte string ``b'Nobody inspects the
 spammish repetition'``::
@@ -110,7 +99,7 @@ More condensed:
    >>> hashlib.sha224(b"Nobody inspects the spammish repetition").hexdigest()
    'a4337bc45a8fc544c03f52dc550cd6e1e87021bc896588bd79e901e2'
 
-.. function:: new(name[, data], *, usedforsecurity=True)
+.. function:: new(name[, data])
 
    Is a generic constructor that takes the string *name* of the desired
    algorithm as its first parameter.  It also exists to allow access to the
@@ -120,10 +109,10 @@ More condensed:
 
 Using :func:`new` with an algorithm provided by OpenSSL:
 
-   >>> h = hashlib.new('sha256')
+   >>> h = hashlib.new('ripemd160')
    >>> h.update(b"Nobody inspects the spammish repetition")
    >>> h.hexdigest()
-   '031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9406'
+   'cc4a5ce1b3df48aec5d22d1f16b894a0b894eccc'
 
 Hashlib provides the following constant attributes:
 
@@ -255,10 +244,10 @@ include a `salt <https://en.wikipedia.org/wiki/Salt_%28cryptography%29>`_.
    *dklen* is the length of the derived key. If *dklen* is ``None`` then the
    digest size of the hash algorithm *hash_name* is used, e.g. 64 for SHA-512.
 
-   >>> import hashlib
+   >>> import hashlib, binascii
    >>> dk = hashlib.pbkdf2_hmac('sha256', b'password', b'salt', 100000)
-   >>> dk.hex()
-   '0394a2ede332c9a13eb82e9b24631604c31df978b4e2f0fbd2c549944f9d79a5'
+   >>> binascii.hexlify(dk)
+   b'0394a2ede332c9a13eb82e9b24631604c31df978b4e2f0fbd2c549944f9d79a5'
 
    .. versionadded:: 3.4
 
@@ -319,13 +308,11 @@ New hash objects are created by calling constructor functions:
 
 .. function:: blake2b(data=b'', *, digest_size=64, key=b'', salt=b'', \
                 person=b'', fanout=1, depth=1, leaf_size=0, node_offset=0,  \
-                node_depth=0, inner_size=0, last_node=False, \
-                usedforsecurity=True)
+                node_depth=0, inner_size=0, last_node=False)
 
 .. function:: blake2s(data=b'', *, digest_size=32, key=b'', salt=b'', \
                 person=b'', fanout=1, depth=1, leaf_size=0, node_offset=0,  \
-                node_depth=0, inner_size=0, last_node=False, \
-                usedforsecurity=True)
+                node_depth=0, inner_size=0, last_node=False)
 
 
 These functions return the corresponding hash objects for calculating
@@ -372,10 +359,10 @@ Constructor functions also accept the following tree hashing parameters:
 * *depth*: maximal depth of tree (1 to 255, 255 if unlimited, 1 in
   sequential mode).
 
-* *leaf_size*: maximal byte length of leaf (0 to ``2**32-1``, 0 if unlimited or in
+* *leaf_size*: maximal byte length of leaf (0 to 2**32-1, 0 if unlimited or in
   sequential mode).
 
-* *node_offset*: node offset (0 to ``2**64-1`` for BLAKE2b, 0 to ``2**48-1`` for
+* *node_offset*: node offset (0 to 2**64-1 for BLAKE2b, 0 to 2**48-1 for
   BLAKE2s, 0 for the first, leftmost, leaf, or in sequential mode).
 
 * *node_depth*: node depth (0 to 255, 0 for leaves, or in sequential mode).
@@ -496,7 +483,7 @@ Keyed hashing
 
 Keyed hashing can be used for authentication as a faster and simpler
 replacement for `Hash-based message authentication code
-<https://en.wikipedia.org/wiki/HMAC>`_ (HMAC).
+<https://en.wikipedia.org/wiki/Hash-based_message_authentication_code>`_ (HMAC).
 BLAKE2 can be securely used in prefix-MAC mode thanks to the
 indifferentiability property inherited from BLAKE.
 

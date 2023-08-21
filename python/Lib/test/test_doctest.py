@@ -93,17 +93,6 @@ class SampleClass:
         22
         """)
 
-    a_class_attribute = 42
-
-    @classmethod
-    @property
-    def a_classmethod_property(cls):
-        """
-        >>> print(SampleClass.a_classmethod_property)
-        42
-        """
-        return cls.a_class_attribute
-
     class NestedClass:
         """
         >>> x = SampleClass.NestedClass(5)
@@ -509,7 +498,6 @@ methods, classmethods, staticmethods, properties, and nested classes.
      1  SampleClass.NestedClass.__init__
      1  SampleClass.__init__
      2  SampleClass.a_classmethod
-     1  SampleClass.a_classmethod_property
      1  SampleClass.a_property
      1  SampleClass.a_staticmethod
      1  SampleClass.double
@@ -565,7 +553,6 @@ functions, classes, and the `__test__` dictionary, if it exists:
      1  some_module.SampleClass.NestedClass.__init__
      1  some_module.SampleClass.__init__
      2  some_module.SampleClass.a_classmethod
-     1  some_module.SampleClass.a_classmethod_property
      1  some_module.SampleClass.a_property
      1  some_module.SampleClass.a_staticmethod
      1  some_module.SampleClass.double
@@ -607,7 +594,6 @@ By default, an object with no doctests doesn't create any tests:
      1  SampleClass.NestedClass.__init__
      1  SampleClass.__init__
      2  SampleClass.a_classmethod
-     1  SampleClass.a_classmethod_property
      1  SampleClass.a_property
      1  SampleClass.a_staticmethod
      1  SampleClass.double
@@ -628,7 +614,6 @@ displays.
      0  SampleClass.NestedClass.square
      1  SampleClass.__init__
      2  SampleClass.a_classmethod
-     1  SampleClass.a_classmethod_property
      1  SampleClass.a_property
      1  SampleClass.a_staticmethod
      1  SampleClass.double
@@ -680,27 +665,22 @@ plain ol' Python and is guaranteed to be available.
 
     >>> import builtins
     >>> tests = doctest.DocTestFinder().find(builtins)
-    >>> 816 < len(tests) < 836 # approximate number of objects with docstrings
+    >>> 800 < len(tests) < 820 # approximate number of objects with docstrings
     True
     >>> real_tests = [t for t in tests if len(t.examples) > 0]
     >>> len(real_tests) # objects that actually have doctests
-    13
+    8
     >>> for t in real_tests:
     ...     print('{}  {}'.format(len(t.examples), t.name))
     ...
     1  builtins.bin
-    5  builtins.bytearray.hex
-    5  builtins.bytes.hex
     3  builtins.float.as_integer_ratio
     2  builtins.float.fromhex
     2  builtins.float.hex
     1  builtins.hex
     1  builtins.int
-    3  builtins.int.as_integer_ratio
     2  builtins.int.bit_length
-    5  builtins.memoryview.hex
     1  builtins.oct
-    1  builtins.zip
 
 Note here that 'bin', 'oct', and 'hex' are functions; 'float.as_integer_ratio',
 'float.hex', and 'int.bit_length' are methods; 'float.fromhex' is a classmethod,
@@ -2509,7 +2489,7 @@ def test_unittest_reportflags():
 
 def test_testfile(): r"""
 Tests for the `testfile()` function.  This function runs all the
-doctest examples in a given file.  In its simple invocation, it is
+doctest examples in a given file.  In its simple invokation, it is
 called with the name of a file, which is taken to be relative to the
 calling module.  The return value is (#failures, #tests).
 
@@ -2831,7 +2811,7 @@ Check doctest with a non-ascii filename:
     Exception raised:
         Traceback (most recent call last):
           File ...
-            exec(compile(example.source, filename, "single",
+            compileflags, 1), test.globs)
           File "<doctest foo-bär@baz[0]>", line 1, in <module>
             raise Exception('clé')
         Exception: clé
@@ -3106,27 +3086,20 @@ def test_no_trailing_whitespace_stripping():
     patches that contain trailing whitespace. More info on Issue 24746.
     """
 
+######################################################################
+## Main
+######################################################################
 
-def test_run_doctestsuite_multiple_times():
-    """
-    It was not possible to run the same DocTestSuite multiple times
-    http://bugs.python.org/issue2604
-    http://bugs.python.org/issue9736
+def test_main():
+    # Check the doctest cases in doctest itself:
+    ret = support.run_doctest(doctest, verbosity=True)
 
-    >>> import unittest
-    >>> import test.sample_doctest
-    >>> suite = doctest.DocTestSuite(test.sample_doctest)
-    >>> suite.run(unittest.TestResult())
-    <unittest.result.TestResult run=9 errors=0 failures=4>
-    >>> suite.run(unittest.TestResult())
-    <unittest.result.TestResult run=9 errors=0 failures=4>
-    """
+    # Check the doctest cases defined here:
+    from test import test_doctest
+    support.run_doctest(test_doctest, verbosity=True)
 
-
-def load_tests(loader, tests, pattern):
-    tests.addTest(doctest.DocTestSuite(doctest))
-    tests.addTest(doctest.DocTestSuite())
-    return tests
+    # Run unittests
+    support.run_unittest(__name__)
 
 
 def test_coverage(coverdir):
@@ -3139,9 +3112,8 @@ def test_coverage(coverdir):
     r.write_results(show_missing=True, summary=True,
                     coverdir=coverdir)
 
-
 if __name__ == '__main__':
     if '-c' in sys.argv:
         test_coverage('/tmp/doctest.cover')
     else:
-        unittest.main()
+        test_main()

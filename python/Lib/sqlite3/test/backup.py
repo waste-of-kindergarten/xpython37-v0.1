@@ -36,13 +36,6 @@ class BackupTests(unittest.TestCase):
         with self.assertRaises(sqlite.ProgrammingError):
             self.cx.backup(bck)
 
-    def test_bad_source_closed_connection(self):
-        bck = sqlite.connect(':memory:')
-        source = sqlite.connect(":memory:")
-        source.close()
-        with self.assertRaises(sqlite.ProgrammingError):
-            source.backup(bck)
-
     def test_bad_target_in_transaction(self):
         bck = sqlite.connect(':memory:')
         bck.execute('CREATE TABLE bar (key INTEGER)')
@@ -150,8 +143,7 @@ class BackupTests(unittest.TestCase):
                 self.cx.backup(bck, name='non-existing')
         self.assertIn(
             str(cm.exception),
-            ['SQL logic error', 'SQL logic error or missing database',
-             'unknown database non-existing']
+            ['SQL logic error', 'SQL logic error or missing database']
         )
 
         self.cx.execute("ATTACH DATABASE ':memory:' AS attached_db")

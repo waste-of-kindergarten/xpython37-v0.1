@@ -4,7 +4,7 @@
 .. module:: asyncio
    :synopsis: Asynchronous I/O.
 
--------------------------------
+--------------
 
 .. sidebar:: Hello World!
 
@@ -17,6 +17,7 @@
            await asyncio.sleep(1)
            print('... World!')
 
+       # Python 3.7+
        asyncio.run(main())
 
 asyncio is a library to write **concurrent** code using
@@ -90,6 +91,3 @@ Additionally, there are **low-level** APIs for
    asyncio-api-index.rst
    asyncio-llapi-index.rst
    asyncio-dev.rst
-
-.. note::
-   The source code for asyncio can be found in :source:`Lib/asyncio/`.

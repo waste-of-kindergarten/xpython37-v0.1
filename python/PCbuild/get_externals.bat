@@ -7,17 +7,14 @@ if NOT DEFINED EXTERNALS_DIR (set EXTERNALS_DIR=%PCBUILD%\..\externals)
 
 set DO_FETCH=true
 set DO_CLEAN=false
-set IncludeLibffiSrc=false
 set IncludeTkinterSrc=false
 set IncludeSSLSrc=false
 
 :CheckOpts
 if "%~1"=="--no-tkinter" (set IncludeTkinter=false) & shift & goto CheckOpts
 if "%~1"=="--no-openssl" (set IncludeSSL=false) & shift & goto CheckOpts
-if "%~1"=="--no-libffi" (set IncludeLibffi=false) & shift & goto CheckOpts
 if "%~1"=="--tkinter-src" (set IncludeTkinterSrc=true) & shift & goto CheckOpts
 if "%~1"=="--openssl-src" (set IncludeSSLSrc=true) & shift & goto CheckOpts
-if "%~1"=="--libffi-src" (set IncludeLibffiSrc=true) & shift & goto CheckOpts
 if "%~1"=="--python" (set PYTHON=%2) & shift & shift & goto CheckOpts
 if "%~1"=="--organization" (set ORG=%2) & shift & shift & goto CheckOpts
 if "%~1"=="-c" (set DO_CLEAN=true) & shift & goto CheckOpts
@@ -51,15 +48,14 @@ if NOT DEFINED PYTHON (
 echo.Fetching external libraries...
 
 set libraries=
-set libraries=%libraries%                                       bzip2-1.0.8
-if NOT "%IncludeLibffiSrc%"=="false" set libraries=%libraries%  libffi-3.3.0
-if NOT "%IncludeSSLSrc%"=="false" set libraries=%libraries%     openssl-1.1.1n
-set libraries=%libraries%                                       sqlite-3.37.2.0
-if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tcl-core-8.6.12.0
-if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tk-8.6.12.0
+set libraries=%libraries%                                       bzip2-1.0.6
+if NOT "%IncludeSSLSrc%"=="false" set libraries=%libraries%     openssl-1.1.1g
+set libraries=%libraries%                                       sqlite-3.31.1.0
+if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tcl-core-8.6.9.0
+if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tk-8.6.9.0
 if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tix-8.4.3.6
-set libraries=%libraries%                                       xz-5.2.5
-set libraries=%libraries%                                       zlib-1.2.12
+set libraries=%libraries%                                       xz-5.2.2
+set libraries=%libraries%                                       zlib-1.2.11
 
 for %%e in (%libraries%) do (
     if exist "%EXTERNALS_DIR%\%%e" (
@@ -76,9 +72,8 @@ for %%e in (%libraries%) do (
 echo.Fetching external binaries...
 
 set binaries=
-if NOT "%IncludeLibffi%"=="false"  set binaries=%binaries% libffi-3.3.0
-if NOT "%IncludeSSL%"=="false"     set binaries=%binaries% openssl-bin-1.1.1n
-if NOT "%IncludeTkinter%"=="false" set binaries=%binaries% tcltk-8.6.12.0
+if NOT "%IncludeSSL%"=="false"     set binaries=%binaries% openssl-bin-1.1.1g
+if NOT "%IncludeTkinter%"=="false" set binaries=%binaries% tcltk-8.6.9.0
 if NOT "%IncludeSSLSrc%"=="false"  set binaries=%binaries% nasm-2.11.06
 
 for %%b in (%binaries%) do (

@@ -42,7 +42,7 @@ Cross Platform
 
    .. note::
 
-      On macOS (and perhaps other platforms), executable files may be
+      On Mac OS X (and perhaps other platforms), executable files may be
       universal files containing multiple architectures.
 
       To get at the "64-bitness" of the current interpreter, it is more
@@ -78,11 +78,6 @@ Cross Platform
 
    Setting *terse* to true causes the function to return only the absolute minimum
    information needed to identify the platform.
-
-   .. versionchanged:: 3.8
-      On macOS, the function now uses :func:`mac_ver`, if it returns a
-      non-empty release string, to get the macOS version rather than the darwin
-      version.
 
 
 .. function:: processor()
@@ -139,7 +134,7 @@ Cross Platform
 
 .. function:: release()
 
-   Returns the system's release, e.g. ``'2.2.0'`` or ``'NT'``. An empty string is
+   Returns the system's release, e.g. ``'2.2.0'`` or ``'NT'`` An empty string is
    returned if the value cannot be determined.
 
 
@@ -176,7 +171,7 @@ Cross Platform
    Entries which cannot be determined are set to ``''``.
 
    .. versionchanged:: 3.3
-      Result changed from a tuple to a :func:`~collections.namedtuple`.
+      Result changed from a tuple to a namedtuple.
 
 
 Java Platform
@@ -201,9 +196,7 @@ Windows Platform
 
    Get additional version information from the Windows Registry and return a tuple
    ``(release, version, csd, ptype)`` referring to OS release, version number,
-   CSD level (service pack) and OS type (multi/single processor). Values which
-   cannot be determined are set to the defaults given as parameters (which all
-   default to an empty string).
+   CSD level (service pack) and OS type (multi/single processor).
 
    As a hint: *ptype* is ``'Uniprocessor Free'`` on single processor NT machines
    and ``'Multiprocessor Free'`` on multi processor machines. The *'Free'* refers
@@ -211,29 +204,35 @@ Windows Platform
    which means the OS version uses debugging code, i.e. code that checks arguments,
    ranges, etc.
 
-.. function:: win32_edition()
+   .. note::
 
-   Returns a string representing the current Windows edition, or ``None`` if the
-   value cannot be determined.  Possible values include but are not limited to
-   ``'Enterprise'``, ``'IoTUAP'``, ``'ServerStandard'``, and ``'nanoserver'``.
-
-   .. versionadded:: 3.8
-
-.. function:: win32_is_iot()
-
-   Return ``True`` if the Windows edition returned by :func:`win32_edition`
-   is recognized as an IoT edition.
-
-   .. versionadded:: 3.8
+      This function works best with Mark Hammond's
+      :mod:`win32all` package installed, but also on Python 2.3 and
+      later (support for this was added in Python 2.6). It obviously
+      only runs on Win32 compatible platforms.
 
 
-macOS Platform
---------------
+Win95/98 specific
+^^^^^^^^^^^^^^^^^
+
+.. function:: popen(cmd, mode='r', bufsize=-1)
+
+   Portable :func:`popen` interface.  Find a working popen implementation
+   preferring :func:`win32pipe.popen`.  On Windows NT, :func:`win32pipe.popen`
+   should work; on Windows 9x it hangs due to bugs in the MS C library.
+
+   .. deprecated:: 3.3
+      This function is obsolete.  Use the :mod:`subprocess` module.  Check
+      especially the :ref:`subprocess-replacements` section.
+
+
+Mac OS Platform
+---------------
 
 
 .. function:: mac_ver(release='', versioninfo=('','',''), machine='')
 
-   Get macOS version information and return it as tuple ``(release, versioninfo,
+   Get Mac OS version information and return it as tuple ``(release, versioninfo,
    machine)`` with *versioninfo* being a tuple ``(version, dev_stage,
    non_release_version)``.
 
@@ -243,6 +242,33 @@ macOS Platform
 
 Unix Platforms
 --------------
+
+
+.. function:: dist(distname='', version='', id='', supported_dists=('SuSE','debian','redhat','mandrake',...))
+
+   This is another name for :func:`linux_distribution`.
+
+   .. deprecated-removed:: 3.5 3.8
+      See alternative like the `distro <https://pypi.org/project/distro>`_ package.
+
+.. function:: linux_distribution(distname='', version='', id='', supported_dists=('SuSE','debian','redhat','mandrake',...), full_distribution_name=1)
+
+   Tries to determine the name of the Linux OS distribution name.
+
+   ``supported_dists`` may be given to define the set of Linux distributions to
+   look for. It defaults to a list of currently supported Linux distributions
+   identified by their release file name.
+
+   If ``full_distribution_name`` is true (default), the full distribution read
+   from the OS is returned. Otherwise the short name taken from
+   ``supported_dists`` is used.
+
+   Returns a tuple ``(distname,version,id)`` which defaults to the args given as
+   parameters.  ``id`` is the item in parentheses after the version number.  It
+   is usually the version codename.
+
+   .. deprecated-removed:: 3.5 3.8
+      See alternative like the `distro <https://pypi.org/project/distro>`_ package.
 
 .. function:: libc_ver(executable=sys.executable, lib='', version='', chunksize=16384)
 

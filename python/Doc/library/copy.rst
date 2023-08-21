@@ -27,11 +27,10 @@ Interface summary:
    Return a deep copy of *x*.
 
 
-.. exception:: Error
+.. exception:: error
 
    Raised for module specific errors.
 
-.. _shallow_vs_deep_copy:
 
 The difference between shallow and deep copying is only relevant for compound
 objects (objects that contain other objects, like lists or class instances):
@@ -60,7 +59,7 @@ The :func:`deepcopy` function avoids these problems by:
   components copied.
 
 This module does not copy types like module, method, stack trace, stack frame,
-file, socket, window, or any similar types.  It does "copy" functions and
+file, socket, window, array, or any similar types.  It does "copy" functions and
 classes (shallow and deeply), by returning the original object unchanged; this
 is compatible with the way these are treated by the :mod:`pickle` module.
 

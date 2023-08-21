@@ -14,18 +14,7 @@ sys.path.append(os.path.abspath('includes'))
 # ---------------------
 
 extensions = ['sphinx.ext.coverage', 'sphinx.ext.doctest',
-              'pyspecific', 'c_annotations', 'escape4chm',
-              'asdl_highlight', 'peg_highlight']
-
-
-doctest_global_setup = '''
-try:
-    import _tkinter
-except ImportError:
-    _tkinter = None
-'''
-
-manpages_url = 'https://manpages.debian.org/{path}'
+              'pyspecific', 'c_annotations', 'escape4chm']
 
 # General substitutions.
 project = 'Python'
@@ -45,8 +34,8 @@ today_fmt = '%B %d, %Y'
 # By default, highlight as Python 3.
 highlight_language = 'python3'
 
-# Minimum version of sphinx required
-needs_sphinx = '1.8'
+# Require Sphinx 1.6.6 for build.
+needs_sphinx = "1.6.6"
 
 # Ignore any .rst files in the venv/ directory.
 exclude_patterns = ['venv/*', 'README.rst']
@@ -66,14 +55,9 @@ master_doc = 'contents'
 # -----------------------
 
 # Use our custom theme.
-html_theme = 'python_docs_theme'
+html_theme = 'pydoctheme'
 html_theme_path = ['tools']
-html_theme_options = {
-    'collapsiblesidebar': True,
-    'issues_url': '/bugs.html',
-    'license_url': '/license.html',
-    'root_include_title': False   # We use the version switcher instead.
-}
+html_theme_options = {'collapsiblesidebar': True}
 
 # Short title used e.g. for <title> HTML tags.
 html_short_title = '%s Documentation' % release
@@ -87,7 +71,7 @@ templates_path = ['tools/templates']
 
 # Custom sidebar templates, filenames relative to this file.
 html_sidebars = {
-    # Defaults taken from https://www.sphinx-doc.org/en/master/usage/configuration.html#confval-html_sidebars
+    # Defaults taken from http://www.sphinx-doc.org/en/stable/config.html#confval-html_sidebars
     # Removes the quick search block
     '**': ['localtoc.html', 'relations.html', 'customsourcelink.html'],
     'index': ['indexsidebar.html'],
@@ -129,7 +113,6 @@ latex_elements['preamble'] = r'''
 }
 \let\Verbatim=\OriginalVerbatim
 \let\endVerbatim=\endOriginalVerbatim
-\setcounter{tocdepth}{2}
 '''
 
 # The paper size ('letter' or 'a4').
@@ -229,13 +212,3 @@ linkcheck_ignore = [r'https://bugs.python.org/(issue)?\d+',
 
 # Relative filename of the reference count data file.
 refcount_file = 'data/refcounts.dat'
-
-# Sphinx 2 and Sphinx 3 compatibility
-# -----------------------------------
-
-# bpo-40204: Allow Sphinx 2 syntax in the C domain
-c_allow_pre_v3 = True
-
-# bpo-40204: Disable warnings on Sphinx 2 syntax of the C domain since the
-# documentation is built with -W (warnings treated as errors).
-c_warn_on_allowed_pre_v3 = False

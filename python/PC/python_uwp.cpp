@@ -82,15 +82,15 @@ get_package_home()
     return std::wstring();
 }
 
-static PyStatus
-set_process_name(PyConfig *config)
+static int
+set_process_name()
 {
-    PyStatus status = PyStatus_Ok();
-    std::wstring executable;
-
     const auto home = get_package_home();
     const auto family = get_package_family();
 
+    std::wstring executable;
+
+    /* If inside a package, use user's symlink name for executable */
     if (!family.empty()) {
         PWSTR localAppData;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0,
@@ -122,54 +122,40 @@ set_process_name(PyConfig *config)
                 break;
             }
         }
-        size_t i = executable.find_last_of(L"/\\");
-        if (i == std::wstring::npos) {
-            executable = PROGNAME;
-        } else {
-            executable.replace(i + 1, std::wstring::npos, PROGNAME);
-        }
     }
 
     if (!home.empty()) {
-        status = PyConfig_SetString(config, &config->home, home.c_str());
-        if (PyStatus_Exception(status)) {
-            return status;
-        }
+        Py_SetPythonHome(home.c_str());
     }
 
     const wchar_t *launcherPath = _wgetenv(L"__PYVENV_LAUNCHER__");
     if (launcherPath) {
         if (!executable.empty()) {
-            status = PyConfig_SetString(config, &config->base_executable,
-                                        executable.c_str());
-            if (PyStatus_Exception(status)) {
-                return status;
-            }
+            _wputenv_s(L"__PYVENV_BASE_EXECUTABLE__", executable.c_str());
         }
-
-        status = PyConfig_SetString(
-            config, &config->executable, launcherPath);
-
+        _Py_SetProgramFullPath(launcherPath);
         /* bpo-35873: Clear the environment variable to avoid it being
-        * inherited by child processes. */
+         * inherited by child processes. */
         _wputenv_s(L"__PYVENV_LAUNCHER__", L"");
     } else if (!executable.empty()) {
-        status = PyConfig_SetString(
-            config, &config->executable, executable.c_str());
+        _Py_SetProgramFullPath(executable.c_str());
     }
 
-    return status;
+    return 1;
 }
 
 int
 wmain(int argc, wchar_t **argv)
 {
-    PyStatus status;
-    PyPreConfig preconfig;
-    PyConfig config;
+    if (!set_process_name()) {
+        return 121;
+    }
+    const wchar_t *p = _wgetenv(L"PYTHONUSERBASE");
+    if (!p || !*p) {
+        _wputenv_s(L"PYTHONUSERBASE", get_user_base().c_str());
+    }
 
-    const wchar_t *moduleName = NULL;
-    const wchar_t *p = wcsrchr(argv[0], L'\\');
+    p = wcsrchr(argv[0], L'\\');
     if (!p) {
         p = argv[0];
     }
@@ -178,74 +164,32 @@ wmain(int argc, wchar_t **argv)
             p++;
         }
 
+        const wchar_t *moduleName = NULL;
         if (wcsnicmp(p, L"pip", 3) == 0) {
             moduleName = L"pip";
+            /* No longer required when pip 19.1 is added */
+            _wputenv_s(L"PIP_USER", L"true");
         } else if (wcsnicmp(p, L"idle", 4) == 0) {
             moduleName = L"idlelib";
         }
-    }
 
-    PyPreConfig_InitPythonConfig(&preconfig);
-    if (!moduleName) {
-        status = Py_PreInitializeFromArgs(&preconfig, argc, argv);
-        if (PyStatus_Exception(status)) {
-            goto fail_without_config;
+        if (moduleName) {
+            /* Not even pretending we're going to free this memory.
+             * The OS will clean it all up when our process exits
+             */
+            wchar_t **new_argv = (wchar_t **)PyMem_RawMalloc((argc + 2) * sizeof(wchar_t *));
+            new_argv[0] = argv[0];
+            new_argv[1] = _PyMem_RawWcsdup(L"-m");
+            new_argv[2] = _PyMem_RawWcsdup(moduleName);
+            for (int i = 1; i < argc; ++i) {
+                new_argv[i + 2] = argv[i];
+            }
+            argv = new_argv;
+            argc += 2;
         }
     }
 
-    PyConfig_InitPythonConfig(&config);
-
-    status = PyConfig_SetArgv(&config, argc, argv);
-    if (PyStatus_Exception(status)) {
-        goto fail;
-    }
-    if (moduleName) {
-        config.parse_argv = 0;
-    }
-
-    status = set_process_name(&config);
-    if (PyStatus_Exception(status)) {
-        goto fail;
-    }
-
-    p = _wgetenv(L"PYTHONUSERBASE");
-    if (!p || !*p) {
-        _wputenv_s(L"PYTHONUSERBASE", get_user_base().c_str());
-    }
-
-    if (moduleName) {
-        status = PyConfig_SetString(&config, &config.run_module, moduleName);
-        if (PyStatus_Exception(status)) {
-            goto fail;
-        }
-        status = PyConfig_SetString(&config, &config.run_filename, NULL);
-        if (PyStatus_Exception(status)) {
-            goto fail;
-        }
-        status = PyConfig_SetString(&config, &config.run_command, NULL);
-        if (PyStatus_Exception(status)) {
-            goto fail;
-        }
-    }
-
-    status = Py_InitializeFromConfig(&config);
-    if (PyStatus_Exception(status)) {
-        goto fail;
-    }
-    PyConfig_Clear(&config);
-
-    return Py_RunMain();
-
-fail:
-    PyConfig_Clear(&config);
-fail_without_config:
-    if (PyStatus_IsExit(status)) {
-        return status.exitcode;
-    }
-    assert(PyStatus_Exception(status));
-    Py_ExitStatusException(status);
-    /* Unreachable code */
-    return 0;
+    return Py_Main(argc, (wchar_t**)argv);
 }
 
 #ifdef PYTHONW

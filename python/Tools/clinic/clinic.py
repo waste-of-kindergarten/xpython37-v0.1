@@ -43,6 +43,9 @@ NoneType = type(None)
 
 version = '1'
 
+_empty = inspect._empty
+_void = inspect._void
+
 NoneType = type(None)
 
 class Unspecified:
@@ -612,9 +615,6 @@ class CLanguage(Language):
         return self.render_function(clinic, function)
 
     def docstring_for_c_string(self, f):
-        if re.search(r'[^\x00-\x7F]', f.docstring):
-            warn("Non-ascii character appear in docstring.")
-
         text, add, output = _text_accumulator()
         # turn docstring into a properly quoted C string
         for line in f.docstring.split('\n'):
@@ -636,35 +636,31 @@ class CLanguage(Language):
         assert parameters
         assert isinstance(parameters[0].converter, self_converter)
         del parameters[0]
-        requires_defining_class = False
-        if parameters and isinstance(parameters[0].converter, defining_class_converter):
-            requires_defining_class = True
-            del parameters[0]
         converters = [p.converter for p in parameters]
 
         has_option_groups = parameters and (parameters[0].group or parameters[-1].group)
         default_return_converter = (not f.return_converter or
             f.return_converter.type == 'PyObject *')
 
-        new_or_init = f.kind in (METHOD_NEW, METHOD_INIT)
+        positional = parameters and parameters[-1].is_positional_only()
+        all_boring_objects = False # yes, this will be false if there are 0 parameters, it's fine
+        first_optional = len(parameters)
+        for i, p in enumerate(parameters):
+            c = p.converter
+            if type(c) != object_converter:
+                break
+            if c.format_unit != 'O':
+                break
+            if p.default is not unspecified:
+                first_optional = min(first_optional, i)
+        else:
+            all_boring_objects = True
 
-        pos_only = min_pos = max_pos = min_kw_only = 0
-        for i, p in enumerate(parameters, 1):
-            if p.is_keyword_only():
-                assert not p.is_positional_only()
-                if not p.is_optional():
-                    min_kw_only = i - max_pos
-            else:
-                max_pos = i
-                if p.is_positional_only():
-                    pos_only = i
-                if not p.is_optional():
-                    min_pos = i
+        new_or_init = f.kind in (METHOD_NEW, METHOD_INIT)
 
         meth_o = (len(parameters) == 1 and
               parameters[0].is_positional_only() and
               not converters[0].is_optional() and
-              not requires_defining_class and
               not new_or_init)
 
         # we have to set these things before we're done:
@@ -684,7 +680,7 @@ class CLanguage(Language):
 
         methoddef_define = normalize_snippet("""
             #define {methoddef_name}    \\
-                {{"{name}", {methoddef_cast}{c_basename}, {methoddef_flags}, {c_basename}__doc__}},
+                {{"{name}", (PyCFunction){c_basename}, {methoddef_flags}, {c_basename}__doc__}},
             """)
         if new_or_init and not f.docstring:
             docstring_prototype = docstring_definition = ''
@@ -722,27 +718,19 @@ class CLanguage(Language):
             {c_basename}({self_type}{self_name}, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
             """)
 
-        parser_prototype_def_class = normalize_snippet("""
-            static PyObject *
-            {c_basename}({self_type}{self_name}, PyTypeObject *{defining_class_name}, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
-        """)
-
         # parser_body_fields remembers the fields passed in to the
         # previous call to parser_body. this is used for an awful hack.
         parser_body_fields = ()
-        parser_body_declarations = ''
-        def parser_body(prototype, *fields, declarations=''):
-            nonlocal parser_body_fields, parser_body_declarations
+        def parser_body(prototype, *fields):
+            nonlocal parser_body_fields
             add, output = text_accumulator()
             add(prototype)
             parser_body_fields = fields
-            parser_body_declarations = declarations
 
             fields = list(fields)
             fields.insert(0, normalize_snippet("""
                 {{
                     {return_value_declaration}
-                    {parser_declarations}
                     {declarations}
                     {initializers}
                 """) + "\n")
@@ -760,43 +748,33 @@ class CLanguage(Language):
             for field in fields:
                 add('\n')
                 add(field)
-            return linear_format(output(), parser_declarations=declarations)
+            return output()
+
+        def insert_keywords(s):
+            return linear_format(s, declarations=
+                'static const char * const _keywords[] = {{{keywords}, NULL}};\n'
+                'static _PyArg_Parser _parser = {{"{format_units}:{name}", _keywords, 0}};\n'
+                '{declarations}')
 
         if not parameters:
-            if not requires_defining_class:
-                # no parameters, METH_NOARGS
-                flags = "METH_NOARGS"
+            # no parameters, METH_NOARGS
 
-                parser_prototype = normalize_snippet("""
-                    static PyObject *
-                    {c_basename}({self_type}{self_name}, PyObject *Py_UNUSED(ignored))
-                    """)
-                parser_code = []
+            flags = "METH_NOARGS"
 
-            else:
-                assert not new_or_init
-
-                flags = "METH_METHOD|METH_FASTCALL|METH_KEYWORDS"
-
-                parser_prototype = parser_prototype_def_class
-                return_error = ('return NULL;' if default_return_converter
-                                else 'goto exit;')
-                parser_code = [normalize_snippet("""
-                    if (nargs) {{
-                        PyErr_SetString(PyExc_TypeError, "{name}() takes no arguments");
-                        %s
-                    }}
-                    """ % return_error, indent=4)]
+            parser_prototype = normalize_snippet("""
+                static PyObject *
+                {c_basename}({self_type}{self_name}, PyObject *Py_UNUSED(ignored))
+                """)
+            parser_definition = parser_prototype
 
             if default_return_converter:
-                parser_definition = '\n'.join([
-                    parser_prototype,
-                    '{{',
-                    *parser_code,
-                    '    return {c_basename}_impl({impl_arguments});',
-                    '}}'])
+                parser_definition = parser_prototype + '\n' + normalize_snippet("""
+                    {{
+                        return {c_basename}_impl({impl_arguments});
+                    }}
+                    """)
             else:
-                parser_definition = parser_body(parser_prototype, *parser_code)
+                parser_definition = parser_body(parser_prototype)
 
         elif meth_o:
             flags = "METH_O"
@@ -829,16 +807,11 @@ class CLanguage(Language):
                     {c_basename}({self_type}{self_name}, PyObject *%s)
                     """ % argname)
 
-                displayname = parameters[0].get_displayname(0)
-                parsearg = converters[0].parse_arg(argname, displayname)
-                if parsearg is None:
-                    parsearg = """
-                        if (!PyArg_Parse(%s, "{format_units}:{name}", {parse_arguments})) {{
-                            goto exit;
-                        }}
-                        """ % argname
-                parser_definition = parser_body(parser_prototype,
-                                                normalize_snippet(parsearg, indent=4))
+                parser_definition = parser_body(parser_prototype, normalize_snippet("""
+                    if (!PyArg_Parse(%s, "{format_units}:{name}", {parse_arguments})) {{
+                        goto exit;
+                    }}
+                    """ % argname, indent=4))
 
         elif has_option_groups:
             # positional parameters with option groups
@@ -850,189 +823,89 @@ class CLanguage(Language):
 
             parser_definition = parser_body(parser_prototype, '    {option_group_parsing}')
 
-        elif not requires_defining_class and pos_only == len(parameters):
+        elif positional and all_boring_objects:
+            # positional-only, but no option groups,
+            # and nothing but normal objects:
+            # PyArg_UnpackTuple!
+
+            if not new_or_init:
+                flags = "METH_FASTCALL"
+                parser_prototype = parser_prototype_fastcall
+
+                parser_definition = parser_body(parser_prototype, normalize_snippet("""
+                    if (!_PyArg_UnpackStack(args, nargs, "{name}",
+                        {unpack_min}, {unpack_max},
+                        {parse_arguments})) {{
+                        goto exit;
+                    }}
+                    """, indent=4))
+            else:
+                flags = "METH_VARARGS"
+                parser_prototype = parser_prototype_varargs
+
+                parser_definition = parser_body(parser_prototype, normalize_snippet("""
+                    if (!PyArg_UnpackTuple(args, "{name}",
+                        {unpack_min}, {unpack_max},
+                        {parse_arguments})) {{
+                        goto exit;
+                    }}
+                    """, indent=4))
+
+        elif positional:
             if not new_or_init:
                 # positional-only, but no option groups
                 # we only need one call to _PyArg_ParseStack
 
                 flags = "METH_FASTCALL"
                 parser_prototype = parser_prototype_fastcall
-                nargs = 'nargs'
-                argname_fmt = 'args[%d]'
+
+                parser_definition = parser_body(parser_prototype, normalize_snippet("""
+                    if (!_PyArg_ParseStack(args, nargs, "{format_units}:{name}",
+                        {parse_arguments})) {{
+                        goto exit;
+                    }}
+                    """, indent=4))
             else:
                 # positional-only, but no option groups
                 # we only need one call to PyArg_ParseTuple
 
                 flags = "METH_VARARGS"
                 parser_prototype = parser_prototype_varargs
-                nargs = 'PyTuple_GET_SIZE(args)'
-                argname_fmt = 'PyTuple_GET_ITEM(args, %d)'
 
-            parser_code = [normalize_snippet("""
-                if (!_PyArg_CheckPositional("{name}", %s, %d, %d)) {{
+                parser_definition = parser_body(parser_prototype, normalize_snippet("""
+                    if (!PyArg_ParseTuple(args, "{format_units}:{name}",
+                        {parse_arguments})) {{
+                        goto exit;
+                    }}
+                    """, indent=4))
+
+        elif not new_or_init:
+            flags = "METH_FASTCALL|METH_KEYWORDS"
+
+            parser_prototype = parser_prototype_fastcall_keywords
+
+            body = normalize_snippet("""
+                if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+                    {parse_arguments})) {{
                     goto exit;
                 }}
-                """ % (nargs, min_pos, max_pos), indent=4)]
-            has_optional = False
-            for i, p in enumerate(parameters):
-                displayname = p.get_displayname(i+1)
-                parsearg = p.converter.parse_arg(argname_fmt % i, displayname)
-                if parsearg is None:
-                    #print('Cannot convert %s %r for %s' % (p.converter.__class__.__name__, p.converter.format_unit, p.converter.name), file=sys.stderr)
-                    parser_code = None
-                    break
-                if has_optional or p.is_optional():
-                    has_optional = True
-                    parser_code.append(normalize_snippet("""
-                        if (%s < %d) {{
-                            goto skip_optional;
-                        }}
-                        """, indent=4) % (nargs, i + 1))
-                parser_code.append(normalize_snippet(parsearg, indent=4))
-
-            if parser_code is not None:
-                if has_optional:
-                    parser_code.append("skip_optional:")
-            else:
-                if not new_or_init:
-                    parser_code = [normalize_snippet("""
-                        if (!_PyArg_ParseStack(args, nargs, "{format_units}:{name}",
-                            {parse_arguments})) {{
-                            goto exit;
-                        }}
-                        """, indent=4)]
-                else:
-                    parser_code = [normalize_snippet("""
-                        if (!PyArg_ParseTuple(args, "{format_units}:{name}",
-                            {parse_arguments})) {{
-                            goto exit;
-                        }}
-                        """, indent=4)]
-            parser_definition = parser_body(parser_prototype, *parser_code)
-
+                """, indent=4)
+            parser_definition = parser_body(parser_prototype, body)
+            parser_definition = insert_keywords(parser_definition)
         else:
-            has_optional_kw = (max(pos_only, min_pos) + min_kw_only < len(converters))
-            if not new_or_init:
-                flags = "METH_FASTCALL|METH_KEYWORDS"
-                parser_prototype = parser_prototype_fastcall_keywords
-                argname_fmt = 'args[%d]'
-                declarations = normalize_snippet("""
-                    static const char * const _keywords[] = {{{keywords} NULL}};
-                    static _PyArg_Parser _parser = {{NULL, _keywords, "{name}", 0}};
-                    PyObject *argsbuf[%s];
-                    """ % len(converters))
-                if has_optional_kw:
-                    declarations += "\nPy_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - %d;" % (min_pos + min_kw_only)
-                parser_code = [normalize_snippet("""
-                    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, %d, %d, %d, argsbuf);
-                    if (!args) {{
-                        goto exit;
-                    }}
-                    """ % (min_pos, max_pos, min_kw_only), indent=4)]
-            else:
-                # positional-or-keyword arguments
-                flags = "METH_VARARGS|METH_KEYWORDS"
-                parser_prototype = parser_prototype_keyword
-                argname_fmt = 'fastargs[%d]'
-                declarations = normalize_snippet("""
-                    static const char * const _keywords[] = {{{keywords} NULL}};
-                    static _PyArg_Parser _parser = {{NULL, _keywords, "{name}", 0}};
-                    PyObject *argsbuf[%s];
-                    PyObject * const *fastargs;
-                    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-                    """ % len(converters))
-                if has_optional_kw:
-                    declarations += "\nPy_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - %d;" % (min_pos + min_kw_only)
-                parser_code = [normalize_snippet("""
-                    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, %d, %d, %d, argsbuf);
-                    if (!fastargs) {{
-                        goto exit;
-                    }}
-                    """ % (min_pos, max_pos, min_kw_only), indent=4)]
-            if requires_defining_class:
-                flags = 'METH_METHOD|' + flags
-                parser_prototype = parser_prototype_def_class
+            # positional-or-keyword arguments
+            flags = "METH_VARARGS|METH_KEYWORDS"
 
-            add_label = None
-            for i, p in enumerate(parameters):
-                if isinstance(p.converter, defining_class_converter):
-                    raise ValueError("defining_class should be the first "
-                                     "parameter (after self)")
-                displayname = p.get_displayname(i+1)
-                parsearg = p.converter.parse_arg(argname_fmt % i, displayname)
-                if parsearg is None:
-                    #print('Cannot convert %s %r for %s' % (p.converter.__class__.__name__, p.converter.format_unit, p.converter.name), file=sys.stderr)
-                    parser_code = None
-                    break
-                if add_label and (i == pos_only or i == max_pos):
-                    parser_code.append("%s:" % add_label)
-                    add_label = None
-                if not p.is_optional():
-                    parser_code.append(normalize_snippet(parsearg, indent=4))
-                elif i < pos_only:
-                    add_label = 'skip_optional_posonly'
-                    parser_code.append(normalize_snippet("""
-                        if (nargs < %d) {{
-                            goto %s;
-                        }}
-                        """ % (i + 1, add_label), indent=4))
-                    if has_optional_kw:
-                        parser_code.append(normalize_snippet("""
-                            noptargs--;
-                            """, indent=4))
-                    parser_code.append(normalize_snippet(parsearg, indent=4))
-                else:
-                    if i < max_pos:
-                        label = 'skip_optional_pos'
-                        first_opt = max(min_pos, pos_only)
-                    else:
-                        label = 'skip_optional_kwonly'
-                        first_opt = max_pos + min_kw_only
-                    if i == first_opt:
-                        add_label = label
-                        parser_code.append(normalize_snippet("""
-                            if (!noptargs) {{
-                                goto %s;
-                            }}
-                            """ % add_label, indent=4))
-                    if i + 1 == len(parameters):
-                        parser_code.append(normalize_snippet(parsearg, indent=4))
-                    else:
-                        add_label = label
-                        parser_code.append(normalize_snippet("""
-                            if (%s) {{
-                            """ % (argname_fmt % i), indent=4))
-                        parser_code.append(normalize_snippet(parsearg, indent=8))
-                        parser_code.append(normalize_snippet("""
-                                if (!--noptargs) {{
-                                    goto %s;
-                                }}
-                            }}
-                            """ % add_label, indent=4))
+            parser_prototype = parser_prototype_keyword
 
-            if parser_code is not None:
-                if add_label:
-                    parser_code.append("%s:" % add_label)
-            else:
-                declarations = (
-                    'static const char * const _keywords[] = {{{keywords} NULL}};\n'
-                    'static _PyArg_Parser _parser = {{"{format_units}:{name}", _keywords, 0}};')
-                if not new_or_init:
-                    parser_code = [normalize_snippet("""
-                        if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser{parse_arguments_comma}
-                            {parse_arguments})) {{
-                            goto exit;
-                        }}
-                        """, indent=4)]
-                else:
-                    parser_code = [normalize_snippet("""
-                        if (!_PyArg_ParseTupleAndKeywordsFast(args, kwargs, &_parser,
-                            {parse_arguments})) {{
-                            goto exit;
-                        }}
-                        """, indent=4)]
-            parser_definition = parser_body(parser_prototype, *parser_code,
-                                            declarations=declarations)
+            body = normalize_snippet("""
+                if (!_PyArg_ParseTupleAndKeywordsFast(args, kwargs, &_parser,
+                    {parse_arguments})) {{
+                    goto exit;
+                }}
+                """, indent=4)
+            parser_definition = parser_body(parser_prototype, body)
+            parser_definition = insert_keywords(parser_definition)
 
 
         if new_or_init:
@@ -1053,9 +926,6 @@ class CLanguage(Language):
             if parses_keywords:
                 assert parses_positional
 
-            if requires_defining_class:
-                raise ValueError("Slot methods cannot access their defining class.")
-
             if not parses_keywords:
                 fields.insert(0, normalize_snippet("""
                     if ({self_type_check}!_PyArg_NoKeywords("{name}", kwargs)) {{
@@ -1069,20 +939,15 @@ class CLanguage(Language):
                         }}
                         """, indent=4))
 
-            parser_definition = parser_body(parser_prototype, *fields,
-                                            declarations=parser_body_declarations)
+            parser_definition = parser_body(parser_prototype, *fields)
+            if parses_keywords:
+                parser_definition = insert_keywords(parser_definition)
 
-
-        if flags in ('METH_NOARGS', 'METH_O', 'METH_VARARGS'):
-            methoddef_cast = "(PyCFunction)"
-        else:
-            methoddef_cast = "(PyCFunction)(void(*)(void))"
 
         if f.methoddef_flags:
             flags += '|' + f.methoddef_flags
 
         methoddef_define = methoddef_define.replace('{methoddef_flags}', flags)
-        methoddef_define = methoddef_define.replace('{methoddef_cast}', methoddef_cast)
 
         methoddef_ifndef = ''
         conditional = self.cpp.condition()
@@ -1217,14 +1082,14 @@ class CLanguage(Language):
             lines = [self.group_to_variable_name(g) + " = 1;" for g in group_ids]
             lines = "\n".join(lines)
 
-            s = """\
+            s = """
     case {count}:
         if (!PyArg_ParseTuple(args, "{format_units}:{name}", {parse_arguments})) {{
             goto exit;
         }}
         {group_booleans}
         break;
-"""
+"""[1:]
             s = linear_format(s, group_booleans=lines)
             s = s.format_map(d)
             add(s)
@@ -1324,8 +1189,7 @@ class CLanguage(Language):
         template_dict['docstring'] = self.docstring_for_c_string(f)
 
         template_dict['self_name'] = template_dict['self_type'] = template_dict['self_type_check'] = ''
-        for converter in converters:
-            converter.set_template_dict(template_dict)
+        f_self.converter.set_template_dict(template_dict)
 
         f.return_converter.render(f, data)
         template_dict['impl_return_type'] = f.return_converter.type
@@ -1333,13 +1197,9 @@ class CLanguage(Language):
         template_dict['declarations'] = format_escape("\n".join(data.declarations))
         template_dict['initializers'] = "\n\n".join(data.initializers)
         template_dict['modifications'] = '\n\n'.join(data.modifications)
-        template_dict['keywords'] = ' '.join('"' + k + '",' for k in data.keywords)
+        template_dict['keywords'] = '"' + '", "'.join(data.keywords) + '"'
         template_dict['format_units'] = ''.join(data.format_units)
         template_dict['parse_arguments'] = ', '.join(data.parse_arguments)
-        if data.parse_arguments:
-            template_dict['parse_arguments_comma'] = ',';
-        else:
-            template_dict['parse_arguments_comma'] = '';
         template_dict['impl_parameters'] = ", ".join(data.impl_parameters)
         template_dict['impl_arguments'] = ", ".join(data.impl_arguments)
         template_dict['return_conversion'] = format_escape("".join(data.return_conversion).rstrip())
@@ -1566,16 +1426,10 @@ class BlockParser:
         def is_stop_line(line):
             # make sure to recognize stop line even if it
             # doesn't end with EOL (it could be the very end of the file)
-            if line.startswith(stop_line):
-                remainder = line[len(stop_line):]
-                if remainder and not remainder.isspace():
-                    fail(f"Garbage after stop line: {remainder!r}")
-                return True
-            else:
-                # gh-92256: don't allow incorrectly formatted stop lines
-                if line.lstrip().startswith(stop_line):
-                    fail(f"Whitespace is not allowed before the stop line: {line!r}")
+            if not line.startswith(stop_line):
                 return False
+            remainder = line[len(stop_line):]
+            return (not remainder) or remainder.isspace()
 
         # consume body of program
         while self.input:
@@ -1657,7 +1511,7 @@ class BlockPrinter:
         dsl_name = block.dsl_name
         write = self.f.write
 
-        assert not ((dsl_name is None) ^ (output is None)), "you must specify dsl_name and output together, dsl_name " + repr(dsl_name)
+        assert not ((dsl_name == None) ^ (output == None)), "you must specify dsl_name and output together, dsl_name " + repr(dsl_name)
 
         if not dsl_name:
             write(input)
@@ -1802,30 +1656,6 @@ legacy_converters = {}
 # The callable should not call builtins.print.
 return_converters = {}
 
-
-def write_file(filename, new_contents):
-    try:
-        with open(filename, 'r', encoding="utf-8") as fp:
-            old_contents = fp.read()
-
-        if old_contents == new_contents:
-            # no change: avoid modifying the file modification time
-            return
-    except FileNotFoundError:
-        pass
-
-    # Atomic write using a temporary file and os.replace()
-    filename_new = f"{filename}.new"
-    with open(filename_new, "w", encoding="utf-8") as fp:
-        fp.write(new_contents)
-
-    try:
-        os.replace(filename_new, filename)
-    except:
-        os.unlink(filename_new)
-        raise
-
-
 clinic = None
 class Clinic:
 
@@ -1872,7 +1702,7 @@ impl_definition block
 
 """
 
-    def __init__(self, language, printer=None, *, verify=True, filename=None):
+    def __init__(self, language, printer=None, *, force=False, verify=True, filename=None):
         # maps strings to Parser objects.
         # (instantiated from the "parsers" global.)
         self.parsers = {}
@@ -1881,6 +1711,7 @@ impl_definition block
             fail("Custom printers are broken right now")
         self.printer = printer or BlockPrinter(language)
         self.verify = verify
+        self.force = force
         self.filename = filename
         self.modules = collections.OrderedDict()
         self.classes = collections.OrderedDict()
@@ -2013,7 +1844,8 @@ impl_definition block
                     block.input = 'preserve\n'
                     printer_2 = BlockPrinter(self.language)
                     printer_2.print_block(block)
-                    write_file(destination.filename, printer_2.f.getvalue())
+                    with open(destination.filename, "wt") as f:
+                        f.write(printer_2.f.getvalue())
                     continue
         text = printer.f.getvalue()
 
@@ -2065,10 +1897,7 @@ impl_definition block
         return module, cls
 
 
-def parse_file(filename, *, verify=True, output=None):
-    if not output:
-        output = filename
-
+def parse_file(filename, *, force=False, verify=True, output=None, encoding='utf-8'):
     extension = os.path.splitext(filename)[1][1:]
     if not extension:
         fail("Can't extract file type for file " + repr(filename))
@@ -2078,7 +1907,7 @@ def parse_file(filename, *, verify=True, output=None):
     except KeyError:
         fail("Can't identify file type for file " + repr(filename))
 
-    with open(filename, 'r', encoding="utf-8") as f:
+    with open(filename, 'r', encoding=encoding) as f:
         raw = f.read()
 
     # exit quickly if there are no clinic markers in the file
@@ -2086,10 +1915,19 @@ def parse_file(filename, *, verify=True, output=None):
     if not find_start_re.search(raw):
         return
 
-    clinic = Clinic(language, verify=verify, filename=filename)
+    clinic = Clinic(language, force=force, verify=verify, filename=filename)
     cooked = clinic.parse(raw)
+    if (cooked == raw) and not force:
+        return
 
-    write_file(output, cooked)
+    directory = os.path.dirname(filename) or '.'
+
+    with tempfile.TemporaryDirectory(prefix="clinic", dir=directory) as tmpdir:
+        bytes = cooked.encode(encoding)
+        tmpfilename = os.path.join(tmpdir, os.path.basename(filename))
+        with open(tmpfilename, "wb") as f:
+            f.write(bytes)
+        os.replace(tmpfilename, output or filename)
 
 
 def compute_checksum(input, length=None):
@@ -2234,7 +2072,7 @@ class Function:
     def __init__(self, parameters=None, *, name,
                  module, cls=None, c_basename=None,
                  full_name=None,
-                 return_converter, return_annotation=inspect.Signature.empty,
+                 return_converter, return_annotation=_empty,
                  docstring=None, kind=CALLABLE, coexist=False,
                  docstring_only=False):
         self.parameters = parameters or collections.OrderedDict()
@@ -2312,8 +2150,8 @@ class Parameter:
     Mutable duck type of inspect.Parameter.
     """
 
-    def __init__(self, name, kind, *, default=inspect.Parameter.empty,
-                 function, converter, annotation=inspect.Parameter.empty,
+    def __init__(self, name, kind, *, default=_empty,
+                 function, converter, annotation=_empty,
                  docstring=None, group=0):
         self.name = name
         self.kind = kind
@@ -2333,9 +2171,6 @@ class Parameter:
     def is_positional_only(self):
         return self.kind == inspect.Parameter.POSITIONAL_ONLY
 
-    def is_optional(self):
-        return (self.default is not unspecified)
-
     def copy(self, **overrides):
         kwargs = {
             'name': self.name, 'kind': self.kind, 'default':self.default,
@@ -2349,13 +2184,6 @@ class Parameter:
             kwargs['converter'] = converter
         return Parameter(**kwargs)
 
-    def get_displayname(self, i):
-        if i == 0:
-            return '"argument"'
-        if not self.is_positional_only():
-            return '''"argument '{}'"'''.format(self.name)
-        else:
-            return '"argument {}"'.format(i)
 
 
 class LandMine:
@@ -2512,7 +2340,7 @@ class CConverter(metaclass=CConverterAutoRegister):
 
     # keep in sync with self_converter.__init__!
     def __init__(self, name, py_name, function, default=unspecified, *, c_default=None, py_default=None, annotation=unspecified, **kwargs):
-        self.name = ensure_legal_c_identifier(name)
+        self.name = name
         self.py_name = py_name
 
         if default is not unspecified:
@@ -2549,7 +2377,8 @@ class CConverter(metaclass=CConverterAutoRegister):
 
     def _render_self(self, parameter, data):
         self.parameter = parameter
-        name = self.name
+        original_name = self.name
+        name = ensure_legal_c_identifier(original_name)
 
         # impl_arguments
         s = ("&" if self.impl_by_reference else "") + name
@@ -2564,7 +2393,8 @@ class CConverter(metaclass=CConverterAutoRegister):
 
     def _render_non_self(self, parameter, data):
         self.parameter = parameter
-        name = self.name
+        original_name = self.name
+        name = ensure_legal_c_identifier(original_name)
 
         # declarations
         d = self.declaration()
@@ -2613,7 +2443,7 @@ class CConverter(metaclass=CConverterAutoRegister):
         """Computes the name of the associated "length" variable."""
         if not self.length:
             return None
-        return self.name + "_length"
+        return ensure_legal_c_identifier(self.name) + "_length"
 
     # Why is this one broken out separately?
     # For "positional-only" function parsing,
@@ -2629,7 +2459,8 @@ class CConverter(metaclass=CConverterAutoRegister):
         elif self.subclass_of:
             list.append(self.subclass_of)
 
-        s = ("&" if self.parse_by_reference else "") + self.name
+        legal_name = ensure_legal_c_identifier(self.name)
+        s = ("&" if self.parse_by_reference else "") + legal_name
         list.append(s)
 
         if self.length:
@@ -2650,7 +2481,7 @@ class CConverter(metaclass=CConverterAutoRegister):
             prototype.append(" ")
         if by_reference:
             prototype.append('*')
-        prototype.append(self.name)
+        prototype.append(ensure_legal_c_identifier(self.name))
         return "".join(prototype)
 
     def declaration(self):
@@ -2703,59 +2534,6 @@ class CConverter(metaclass=CConverterAutoRegister):
         """
         pass
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'O&':
-            return """
-                if (!{converter}({argname}, &{paramname})) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           converter=self.converter)
-        if self.format_unit == 'O!':
-            cast = '(%s)' % self.type if self.type != 'PyObject *' else ''
-            if self.subclass_of in type_checks:
-                typecheck, typename = type_checks[self.subclass_of]
-                return """
-                    if (!{typecheck}({argname})) {{{{
-                        _PyArg_BadArgument("{{name}}", {displayname}, "{typename}", {argname});
-                        goto exit;
-                    }}}}
-                    {paramname} = {cast}{argname};
-                    """.format(argname=argname, paramname=self.name,
-                               displayname=displayname, typecheck=typecheck,
-                               typename=typename, cast=cast)
-            return """
-                if (!PyObject_TypeCheck({argname}, {subclass_of})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, ({subclass_of})->tp_name, {argname});
-                    goto exit;
-                }}}}
-                {paramname} = {cast}{argname};
-                """.format(argname=argname, paramname=self.name,
-                           subclass_of=self.subclass_of, cast=cast,
-                           displayname=displayname)
-        if self.format_unit == 'O':
-            cast = '(%s)' % self.type if self.type != 'PyObject *' else ''
-            return """
-                {paramname} = {cast}{argname};
-                """.format(argname=argname, paramname=self.name, cast=cast)
-        return None
-
-    def set_template_dict(self, template_dict):
-        pass
-
-
-type_checks = {
-    '&PyLong_Type': ('PyLong_Check', 'int'),
-    '&PyTuple_Type': ('PyTuple_Check', 'tuple'),
-    '&PyList_Type': ('PyList_Check', 'list'),
-    '&PySet_Type': ('PySet_Check', 'set'),
-    '&PyFrozenSet_Type': ('PyFrozenSet_Check', 'frozenset'),
-    '&PyDict_Type': ('PyDict_Check', 'dict'),
-    '&PyUnicode_Type': ('PyUnicode_Check', 'str'),
-    '&PyBytes_Type': ('PyBytes_Check', 'bytes'),
-    '&PyByteArray_Type': ('PyByteArray_Check', 'bytearray'),
-}
-
 
 class bool_converter(CConverter):
     type = 'int'
@@ -2772,49 +2550,6 @@ class bool_converter(CConverter):
             self.default = bool(self.default)
             self.c_default = str(int(self.default))
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'i':
-            # XXX PyFloat_Check can be removed after the end of the
-            # deprecation in _PyLong_FromNbIndexOrNbInt.
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = _PyLong_AsInt({argname});
-                if ({paramname} == -1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        elif self.format_unit == 'p':
-            return """
-                {paramname} = PyObject_IsTrue({argname});
-                if ({paramname} < 0) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
-class defining_class_converter(CConverter):
-    """
-    A special-case converter:
-    this is the default converter used for the defining class.
-    """
-    type = 'PyTypeObject *'
-    format_unit = ''
-    show_in_signature = False
-
-    def converter_init(self, *, type=None):
-        self.specified_type = type
-
-    def render(self, parameter, data):
-        self._render_self(parameter, data)
-
-    def set_template_dict(self, template_dict):
-        template_dict['defining_class_name'] = self.name
-
-
 class char_converter(CConverter):
     type = 'char'
     default_type = (bytes, bytearray)
@@ -2822,30 +2557,8 @@ class char_converter(CConverter):
     c_ignored_default = "'\0'"
 
     def converter_init(self):
-        if isinstance(self.default, self.default_type):
-            if len(self.default) != 1:
-                fail("char_converter: illegal default value " + repr(self.default))
-
-            self.c_default = repr(bytes(self.default))[1:]
-            if self.c_default == '"\'"':
-                self.c_default = r"'\''"
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'c':
-            return """
-                if (PyBytes_Check({argname}) && PyBytes_GET_SIZE({argname}) == 1) {{{{
-                    {paramname} = PyBytes_AS_STRING({argname})[0];
-                }}}}
-                else if (PyByteArray_Check({argname}) && PyByteArray_GET_SIZE({argname}) == 1) {{{{
-                    {paramname} = PyByteArray_AS_STRING({argname})[0];
-                }}}}
-                else {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "a byte string of length 1", {argname});
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
+        if isinstance(self.default, self.default_type) and (len(self.default) != 1):
+            fail("char_converter: illegal default value " + repr(self.default))
 
 
 @add_legacy_c_converter('B', bitwise=True)
@@ -2859,53 +2572,6 @@ class unsigned_char_converter(CConverter):
         if bitwise:
             self.format_unit = 'B'
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'b':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {{{{
-                    long ival = PyLong_AsLong({argname});
-                    if (ival == -1 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                    else if (ival < 0) {{{{
-                        PyErr_SetString(PyExc_OverflowError,
-                                        "unsigned byte integer is less than minimum");
-                        goto exit;
-                    }}}}
-                    else if (ival > UCHAR_MAX) {{{{
-                        PyErr_SetString(PyExc_OverflowError,
-                                        "unsigned byte integer is greater than maximum");
-                        goto exit;
-                    }}}}
-                    else {{{{
-                        {paramname} = (unsigned char) ival;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        elif self.format_unit == 'B':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {{{{
-                    long ival = PyLong_AsUnsignedLongMask({argname});
-                    if (ival == -1 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                    else {{{{
-                        {paramname} = (unsigned char) ival;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 class byte_converter(unsigned_char_converter): pass
 
 class short_converter(CConverter):
@@ -2914,61 +2580,15 @@ class short_converter(CConverter):
     format_unit = 'h'
     c_ignored_default = "0"
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'h':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {{{{
-                    long ival = PyLong_AsLong({argname});
-                    if (ival == -1 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                    else if (ival < SHRT_MIN) {{{{
-                        PyErr_SetString(PyExc_OverflowError,
-                                        "signed short integer is less than minimum");
-                        goto exit;
-                    }}}}
-                    else if (ival > SHRT_MAX) {{{{
-                        PyErr_SetString(PyExc_OverflowError,
-                                        "signed short integer is greater than maximum");
-                        goto exit;
-                    }}}}
-                    else {{{{
-                        {paramname} = (short) ival;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 class unsigned_short_converter(CConverter):
     type = 'unsigned short'
     default_type = int
+    format_unit = 'H'
     c_ignored_default = "0"
 
     def converter_init(self, *, bitwise=False):
-        if bitwise:
-            self.format_unit = 'H'
-        else:
-            self.converter = '_PyLong_UnsignedShort_Converter'
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'H':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = (unsigned short)PyLong_AsUnsignedLongMask({argname});
-                if ({paramname} == (unsigned short)-1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
+        if not bitwise:
+            fail("Unsigned shorts must be bitwise (for now).")
 
 @add_legacy_c_converter('C', accept={str})
 class int_converter(CConverter):
@@ -2982,65 +2602,18 @@ class int_converter(CConverter):
             self.format_unit = 'C'
         elif accept != {int}:
             fail("int_converter: illegal 'accept' argument " + repr(accept))
-        if type is not None:
+        if type != None:
             self.type = type
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'i':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = _PyLong_AsInt({argname});
-                if ({paramname} == -1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        elif self.format_unit == 'C':
-            return """
-                if (!PyUnicode_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "a unicode character", {argname});
-                    goto exit;
-                }}}}
-                if (PyUnicode_READY({argname})) {{{{
-                    goto exit;
-                }}}}
-                if (PyUnicode_GET_LENGTH({argname}) != 1) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "a unicode character", {argname});
-                    goto exit;
-                }}}}
-                {paramname} = PyUnicode_READ_CHAR({argname}, 0);
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
 
 class unsigned_int_converter(CConverter):
     type = 'unsigned int'
     default_type = int
+    format_unit = 'I'
     c_ignored_default = "0"
 
     def converter_init(self, *, bitwise=False):
-        if bitwise:
-            self.format_unit = 'I'
-        else:
-            self.converter = '_PyLong_UnsignedInt_Converter'
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'I':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = (unsigned int)PyLong_AsUnsignedLongMask({argname});
-                if ({paramname} == (unsigned int)-1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
+        if not bitwise:
+            fail("Unsigned ints must be bitwise (for now).")
 
 class long_converter(CConverter):
     type = 'long'
@@ -3048,43 +2621,15 @@ class long_converter(CConverter):
     format_unit = 'l'
     c_ignored_default = "0"
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'l':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = PyLong_AsLong({argname});
-                if ({paramname} == -1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 class unsigned_long_converter(CConverter):
     type = 'unsigned long'
     default_type = int
+    format_unit = 'k'
     c_ignored_default = "0"
 
     def converter_init(self, *, bitwise=False):
-        if bitwise:
-            self.format_unit = 'k'
-        else:
-            self.converter = '_PyLong_UnsignedLong_Converter'
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'k':
-            return """
-                if (!PyLong_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "int", {argname});
-                    goto exit;
-                }}}}
-                {paramname} = PyLong_AsUnsignedLongMask({argname});
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
+        if not bitwise:
+            fail("Unsigned longs must be bitwise (for now).")
 
 class long_long_converter(CConverter):
     type = 'long long'
@@ -3092,43 +2637,16 @@ class long_long_converter(CConverter):
     format_unit = 'L'
     c_ignored_default = "0"
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'L':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {paramname} = PyLong_AsLongLong({argname});
-                if ({paramname} == -1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 class unsigned_long_long_converter(CConverter):
     type = 'unsigned long long'
     default_type = int
+    format_unit = 'K'
     c_ignored_default = "0"
 
     def converter_init(self, *, bitwise=False):
-        if bitwise:
-            self.format_unit = 'K'
-        else:
-            self.converter = '_PyLong_UnsignedLongLong_Converter'
+        if not bitwise:
+            fail("Unsigned long long must be bitwise (for now).")
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'K':
-            return """
-                if (!PyLong_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "int", {argname});
-                    goto exit;
-                }}}}
-                {paramname} = PyLong_AsUnsignedLongLongMask({argname});
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
 
 class Py_ssize_t_converter(CConverter):
     type = 'Py_ssize_t'
@@ -3143,29 +2661,6 @@ class Py_ssize_t_converter(CConverter):
         else:
             fail("Py_ssize_t_converter: illegal 'accept' argument " + repr(accept))
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'n':
-            return """
-                if (PyFloat_Check({argname})) {{{{
-                    PyErr_SetString(PyExc_TypeError,
-                                    "integer argument expected, got float" );
-                    goto exit;
-                }}}}
-                {{{{
-                    Py_ssize_t ival = -1;
-                    PyObject *iobj = PyNumber_Index({argname});
-                    if (iobj != NULL) {{{{
-                        ival = PyLong_AsSsize_t(iobj);
-                        Py_DECREF(iobj);
-                    }}}}
-                    if (ival == -1 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                    {paramname} = ival;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 
 class slice_index_converter(CConverter):
     type = 'Py_ssize_t'
@@ -3178,21 +2673,6 @@ class slice_index_converter(CConverter):
         else:
             fail("slice_index_converter: illegal 'accept' argument " + repr(accept))
 
-class size_t_converter(CConverter):
-    type = 'size_t'
-    converter = '_PyLong_Size_t_Converter'
-    c_ignored_default = "0"
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'n':
-            return """
-                {paramname} = PyNumber_AsSsize_t({argname}, PyExc_OverflowError);
-                if ({paramname} == -1 && PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 
 class float_converter(CConverter):
     type = 'float'
@@ -3200,43 +2680,11 @@ class float_converter(CConverter):
     format_unit = 'f'
     c_ignored_default = "0.0"
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'f':
-            return """
-                if (PyFloat_CheckExact({argname})) {{{{
-                    {paramname} = (float) (PyFloat_AS_DOUBLE({argname}));
-                }}}}
-                else
-                {{{{
-                    {paramname} = (float) PyFloat_AsDouble({argname});
-                    if ({paramname} == -1.0 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
-
 class double_converter(CConverter):
     type = 'double'
     default_type = float
     format_unit = 'd'
     c_ignored_default = "0.0"
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'd':
-            return """
-                if (PyFloat_CheckExact({argname})) {{{{
-                    {paramname} = PyFloat_AS_DOUBLE({argname});
-                }}}}
-                else
-                {{{{
-                    {paramname} = PyFloat_AsDouble({argname});
-                    if ({paramname} == -1.0 && PyErr_Occurred()) {{{{
-                        goto exit;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
 
 
 class Py_complex_converter(CConverter):
@@ -3244,16 +2692,6 @@ class Py_complex_converter(CConverter):
     default_type = complex
     format_unit = 'D'
     c_ignored_default = "{0.0, 0.0}"
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'D':
-            return """
-                {paramname} = PyComplex_AsCComplex({argname});
-                if (PyErr_Occurred()) {{{{
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name)
-        return super().parse_arg(argname, displayname)
 
 
 class object_converter(CConverter):
@@ -3313,59 +2751,15 @@ class str_converter(CConverter):
             # sorry, clinic can't support preallocated buffers
             # for es# and et#
             self.c_default = "NULL"
-        if NoneType in accept and self.c_default == "Py_None":
-            self.c_default = "NULL"
 
     def cleanup(self):
         if self.encoding:
-            name = self.name
+            name = ensure_legal_c_identifier(self.name)
             return "".join(["if (", name, ") {\n   PyMem_FREE(", name, ");\n}\n"])
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 's':
-            return """
-                if (!PyUnicode_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "str", {argname});
-                    goto exit;
-                }}}}
-                Py_ssize_t {paramname}_length;
-                {paramname} = PyUnicode_AsUTF8AndSize({argname}, &{paramname}_length);
-                if ({paramname} == NULL) {{{{
-                    goto exit;
-                }}}}
-                if (strlen({paramname}) != (size_t){paramname}_length) {{{{
-                    PyErr_SetString(PyExc_ValueError, "embedded null character");
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        if self.format_unit == 'z':
-            return """
-                if ({argname} == Py_None) {{{{
-                    {paramname} = NULL;
-                }}}}
-                else if (PyUnicode_Check({argname})) {{{{
-                    Py_ssize_t {paramname}_length;
-                    {paramname} = PyUnicode_AsUTF8AndSize({argname}, &{paramname}_length);
-                    if ({paramname} == NULL) {{{{
-                        goto exit;
-                    }}}}
-                    if (strlen({paramname}) != (size_t){paramname}_length) {{{{
-                        PyErr_SetString(PyExc_ValueError, "embedded null character");
-                        goto exit;
-                    }}}}
-                }}}}
-                else {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "str or None", {argname});
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
 
 #
 # This is the fourth or fifth rewrite of registering all the
-# string converter format units.  Previous approaches hid
+# crazy string converter format units.  Previous approaches hid
 # bugs--generally mismatches between the semantics of the format
 # unit and the arguments necessary to represent those semantics
 # properly.  Hopefully with this approach we'll get it 100% right.
@@ -3416,54 +2810,15 @@ class PyBytesObject_converter(CConverter):
     format_unit = 'S'
     # accept = {bytes}
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'S':
-            return """
-                if (!PyBytes_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "bytes", {argname});
-                    goto exit;
-                }}}}
-                {paramname} = ({type}){argname};
-                """.format(argname=argname, paramname=self.name,
-                           type=self.type, displayname=displayname)
-        return super().parse_arg(argname, displayname)
-
 class PyByteArrayObject_converter(CConverter):
     type = 'PyByteArrayObject *'
     format_unit = 'Y'
     # accept = {bytearray}
 
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'Y':
-            return """
-                if (!PyByteArray_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "bytearray", {argname});
-                    goto exit;
-                }}}}
-                {paramname} = ({type}){argname};
-                """.format(argname=argname, paramname=self.name,
-                           type=self.type, displayname=displayname)
-        return super().parse_arg(argname, displayname)
-
 class unicode_converter(CConverter):
     type = 'PyObject *'
     default_type = (str, Null, NoneType)
     format_unit = 'U'
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'U':
-            return """
-                if (!PyUnicode_Check({argname})) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "str", {argname});
-                    goto exit;
-                }}}}
-                if (PyUnicode_READY({argname}) == -1) {{{{
-                    goto exit;
-                }}}}
-                {paramname} = {argname};
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
 
 @add_legacy_c_converter('u#', zeroes=True)
 @add_legacy_c_converter('Z', accept={str, NoneType})
@@ -3509,56 +2864,8 @@ class Py_buffer_converter(CConverter):
         self.format_unit = format_unit
 
     def cleanup(self):
-        name = self.name
+        name = ensure_legal_c_identifier(self.name)
         return "".join(["if (", name, ".obj) {\n   PyBuffer_Release(&", name, ");\n}\n"])
-
-    def parse_arg(self, argname, displayname):
-        if self.format_unit == 'y*':
-            return """
-                if (PyObject_GetBuffer({argname}, &{paramname}, PyBUF_SIMPLE) != 0) {{{{
-                    goto exit;
-                }}}}
-                if (!PyBuffer_IsContiguous(&{paramname}, 'C')) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "contiguous buffer", {argname});
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        elif self.format_unit == 's*':
-            return """
-                if (PyUnicode_Check({argname})) {{{{
-                    Py_ssize_t len;
-                    const char *ptr = PyUnicode_AsUTF8AndSize({argname}, &len);
-                    if (ptr == NULL) {{{{
-                        goto exit;
-                    }}}}
-                    PyBuffer_FillInfo(&{paramname}, {argname}, (void *)ptr, len, 1, 0);
-                }}}}
-                else {{{{ /* any bytes-like object */
-                    if (PyObject_GetBuffer({argname}, &{paramname}, PyBUF_SIMPLE) != 0) {{{{
-                        goto exit;
-                    }}}}
-                    if (!PyBuffer_IsContiguous(&{paramname}, 'C')) {{{{
-                        _PyArg_BadArgument("{{name}}", {displayname}, "contiguous buffer", {argname});
-                        goto exit;
-                    }}}}
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        elif self.format_unit == 'w*':
-            return """
-                if (PyObject_GetBuffer({argname}, &{paramname}, PyBUF_WRITABLE) < 0) {{{{
-                    PyErr_Clear();
-                    _PyArg_BadArgument("{{name}}", {displayname}, "read-write bytes-like object", {argname});
-                    goto exit;
-                }}}}
-                if (!PyBuffer_IsContiguous(&{paramname}, 'C')) {{{{
-                    _PyArg_BadArgument("{{name}}", {displayname}, "contiguous buffer", {argname});
-                    goto exit;
-                }}}}
-                """.format(argname=argname, paramname=self.name,
-                           displayname=displayname)
-        return super().parse_arg(argname, displayname)
 
 
 def correct_name_for_self(f):
@@ -3670,14 +2977,17 @@ class self_converter(CConverter):
         cls = self.function.cls
 
         if ((kind in (METHOD_NEW, METHOD_INIT)) and cls and cls.typedef):
-            type_object = self.function.cls.type_object
             if kind == METHOD_NEW:
-                type_check = '({} == {})'.format(self.name, type_object)
+                passed_in_type = self.name
             else:
-                type_check = 'Py_IS_TYPE({}, {})'.format(self.name, type_object)
+                passed_in_type = 'Py_TYPE({})'.format(self.name)
 
-            line = '{} &&\n        '.format(type_check)
-            template_dict['self_type_check'] = line
+            line = '({passed_in_type} == {type_object}) &&\n        '
+            d = {
+                'type_object': self.function.cls.type_object,
+                'passed_in_type': passed_in_type
+                }
+            template_dict['self_type_check'] = line.format_map(d)
 
 
 
@@ -3820,6 +3130,16 @@ class double_return_converter(CReturnConverter):
 class float_return_converter(double_return_converter):
     type = 'float'
     cast = '(double)'
+
+
+class DecodeFSDefault_return_converter(CReturnConverter):
+    type = 'char *'
+
+    def render(self, function, data):
+        self.declare(data)
+        self.err_occurred_if_null_pointer("_return_value", data)
+        data.return_conversion.append(
+            'return_value = PyUnicode_DecodeFSDefault(_return_value);\n')
 
 
 def eval_ast_expr(node, globals, *, filename='-'):
@@ -4492,6 +3812,9 @@ class DSLParser:
                         # "starred": "a = [1, 2, 3]; *a"
                         visit_Starred = bad_node
 
+                        # allow ellipsis, for now
+                        # visit_Ellipsis = bad_node
+
                     blacklist = DetectBadNodes()
                     blacklist.visit(module)
                     bad = blacklist.bad
@@ -4514,18 +3837,13 @@ class DSLParser:
                 # mild hack: explicitly support NULL as a default value
                 if isinstance(expr, ast.Name) and expr.id == 'NULL':
                     value = NULL
-                    py_default = '<unrepresentable>'
+                    py_default = 'None'
                     c_default = "NULL"
                 elif (isinstance(expr, ast.BinOp) or
-                    (isinstance(expr, ast.UnaryOp) and
-                     not (isinstance(expr.operand, ast.Num) or
-                          (hasattr(ast, 'Constant') and
-                           isinstance(expr.operand, ast.Constant) and
-                           type(expr.operand.value) in (int, float, complex)))
-                    )):
+                    (isinstance(expr, ast.UnaryOp) and not isinstance(expr.operand, ast.Num))):
                     c_default = kwargs.get("c_default")
                     if not (isinstance(c_default, str) and c_default):
-                        fail("When you specify an expression (" + repr(default) + ") as your default value,\nyou MUST specify a valid c_default." + ast.dump(expr))
+                        fail("When you specify an expression (" + repr(default) + ") as your default value,\nyou MUST specify a valid c_default.")
                     py_default = default
                     value = unknown
                 elif isinstance(expr, ast.Attribute):
@@ -4593,19 +3911,6 @@ class DSLParser:
             else:
                 fail("A 'self' parameter, if specified, must be the very first thing in the parameter block.")
 
-        if isinstance(converter, defining_class_converter):
-            _lp = len(self.function.parameters)
-            if _lp == 1:
-                if (self.parameter_state != self.ps_required):
-                    fail("A 'defining_class' parameter cannot be marked optional.")
-                if value is not unspecified:
-                    fail("A 'defining_class' parameter cannot have a default value.")
-                if self.group:
-                    fail("A 'defining_class' parameter cannot be in an optional group.")
-            else:
-                fail("A 'defining_class' parameter, if specified, must either be the first thing in the parameter block, or come just after 'self'.")
-
-
         p = Parameter(parameter_name, kind, function=self.function, converter=converter, default=value, group=self.group)
 
         if parameter_name in self.function.parameters:
@@ -4613,11 +3918,6 @@ class DSLParser:
         self.function.parameters[parameter_name] = p
 
     def parse_converter(self, annotation):
-        if (hasattr(ast, 'Constant') and
-            isinstance(annotation, ast.Constant) and
-            type(annotation.value) is str):
-            return annotation.value, True, {}
-
         if isinstance(annotation, ast.Str):
             return annotation.s, True, {}
 
@@ -5027,14 +4327,7 @@ def main(argv):
         sys.exit("Error: clinic.py requires Python 3.3 or greater.")
 
     import argparse
-    cmdline = argparse.ArgumentParser(
-        description="""Preprocessor for CPython C files.
-
-The purpose of the Argument Clinic is automating all the boilerplate involved
-with writing argument parsing code for builtins and providing introspection
-signatures ("docstrings") for CPython builtins.
-
-For more information see https://docs.python.org/3/howto/clinic.html""")
+    cmdline = argparse.ArgumentParser()
     cmdline.add_argument("-f", "--force", action='store_true')
     cmdline.add_argument("-o", "--output", type=str)
     cmdline.add_argument("-v", "--verbose", action='store_true')
@@ -5128,7 +4421,7 @@ For more information see https://docs.python.org/3/howto/clinic.html""")
                 path = os.path.join(root, filename)
                 if ns.verbose:
                     print(path)
-                parse_file(path, verify=not ns.force)
+                parse_file(path, force=ns.force, verify=not ns.force)
         return
 
     if not ns.filename:
@@ -5144,7 +4437,7 @@ For more information see https://docs.python.org/3/howto/clinic.html""")
     for filename in ns.filename:
         if ns.verbose:
             print(filename)
-        parse_file(filename, output=ns.output, verify=not ns.force)
+        parse_file(filename, output=ns.output, force=ns.force, verify=not ns.force)
 
 
 if __name__ == "__main__":

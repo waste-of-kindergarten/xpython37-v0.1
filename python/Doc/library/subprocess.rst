@@ -214,9 +214,7 @@ compatibility with older versions, see the :ref:`call-function-trio` section.
 .. exception:: CalledProcessError
 
     Subclass of :exc:`SubprocessError`, raised when a process run by
-    :func:`check_call`, :func:`check_output`, or :func:`run` (with ``check=True``)
-    returns a non-zero exit status.
-
+    :func:`check_call` or :func:`check_output` returns a non-zero exit status.
 
     .. attribute:: returncode
 
@@ -266,14 +264,13 @@ default values. The arguments that are most commonly needed are:
    *stdin*, *stdout* and *stderr* specify the executed program's standard input,
    standard output and standard error file handles, respectively.  Valid values
    are :data:`PIPE`, :data:`DEVNULL`, an existing file descriptor (a positive
-   integer), an existing file object with a valid file descriptor, and ``None``.
-   :data:`PIPE` indicates that a new pipe to the child should be created.
-   :data:`DEVNULL` indicates that the special file :data:`os.devnull` will
-   be used.  With the default settings of ``None``, no redirection will occur;
-   the child's file handles will be inherited from the parent.
-   Additionally, *stderr* can be :data:`STDOUT`, which indicates that the
-   stderr data from the child process should be captured into the same file
-   handle as for *stdout*.
+   integer), an existing file object, and ``None``.  :data:`PIPE` indicates
+   that a new pipe to the child should be created.  :data:`DEVNULL` indicates
+   that the special file :data:`os.devnull` will be used.  With the default
+   settings of ``None``, no redirection will occur; the child's file handles
+   will be inherited from the parent.  Additionally, *stderr* can be
+   :data:`STDOUT`, which indicates that the stderr data from the child
+   process should be captured into the same file handle as for *stdout*.
 
    .. index::
       single: universal newlines; subprocess module
@@ -342,8 +339,7 @@ functions.
                  stderr=None, preexec_fn=None, close_fds=True, shell=False, \
                  cwd=None, env=None, universal_newlines=None, \
                  startupinfo=None, creationflags=0, restore_signals=True, \
-                 start_new_session=False, pass_fds=(), *, group=None, \
-                 extra_groups=None, user=None, umask=-1, \
+                 start_new_session=False, pass_fds=(), *, \
                  encoding=None, errors=None, text=None)
 
    Execute a child program in a new process.  On POSIX, the class uses
@@ -351,8 +347,7 @@ functions.
    the class uses the Windows ``CreateProcess()`` function.  The arguments to
    :class:`Popen` are as follows.
 
-   *args* should be a sequence of program arguments or else a single string
-   or :term:`path-like object`.
+   *args* should be a sequence of program arguments or else a single string.
    By default, the program to execute is the first item in *args* if *args* is
    a sequence.  If *args* is a string, the interpretation is
    platform-dependent and described below.  See the *shell* and *executable*
@@ -391,15 +386,6 @@ functions.
    On Windows, if *args* is a sequence, it will be converted to a string in a
    manner described in :ref:`converting-argument-sequence`.  This is because
    the underlying ``CreateProcess()`` operates on strings.
-
-   .. versionchanged:: 3.6
-      *args* parameter accepts a :term:`path-like object` if *shell* is
-      ``False`` and a sequence containing path-like objects on POSIX.
-
-   .. versionchanged:: 3.8
-      *args* parameter accepts a :term:`path-like object` if *shell* is
-      ``False`` and a sequence containing bytes and path-like objects
-      on Windows.
 
    The *shell* argument (which defaults to ``False``) specifies whether to use
    the shell as the program to execute.  If *shell* is ``True``, it is
@@ -456,24 +442,16 @@ functions.
    :program:`ps`.  If ``shell=True``, on POSIX the *executable* argument
    specifies a replacement shell for the default :file:`/bin/sh`.
 
-   .. versionchanged:: 3.6
-      *executable* parameter accepts a :term:`path-like object` on POSIX.
-
-   .. versionchanged:: 3.8
-      *executable* parameter accepts a bytes and :term:`path-like object`
-      on Windows.
-
    *stdin*, *stdout* and *stderr* specify the executed program's standard input,
    standard output and standard error file handles, respectively.  Valid values
    are :data:`PIPE`, :data:`DEVNULL`, an existing file descriptor (a positive
-   integer), an existing :term:`file object` with a valid file descriptor,
-   and ``None``.  :data:`PIPE` indicates that a new pipe to the child should
-   be created.  :data:`DEVNULL` indicates that the special file
-   :data:`os.devnull` will be used. With the default settings of ``None``,
-   no redirection will occur; the child's file handles will be inherited from
-   the parent.  Additionally, *stderr* can be :data:`STDOUT`, which indicates
-   that the stderr data from the applications should be captured into the same
-   file handle as for stdout.
+   integer), an existing :term:`file object`, and ``None``.  :data:`PIPE`
+   indicates that a new pipe to the child should be created.  :data:`DEVNULL`
+   indicates that the special file :data:`os.devnull` will be used. With the
+   default settings of ``None``, no redirection will occur; the child's file
+   handles will be inherited from the parent.  Additionally, *stderr* can be
+   :data:`STDOUT`, which indicates that the stderr data from the applications
+   should be captured into the same file handle as for stdout.
 
    If *preexec_fn* is set to a callable object, this object will be called in the
    child process just before the child is executed.
@@ -493,13 +471,6 @@ functions.
       parameter rather than doing it in a *preexec_fn*.
       The *start_new_session* parameter can take the place of a previously
       common use of *preexec_fn* to call os.setsid() in the child.
-
-   .. versionchanged:: 3.8
-
-      The *preexec_fn* parameter is no longer supported in subinterpreters.
-      The use of the parameter in a subinterpreter raises
-      :exc:`RuntimeError`. The new restriction may affect applications that
-      are deployed in mod_wsgi, uWSGI, and other embedded environments.
 
    If *close_fds* is true, all file descriptors except :const:`0`, :const:`1` and
    :const:`2` will be closed before the child process is executed.  Otherwise
@@ -523,23 +494,17 @@ functions.
    between the parent and child.  Providing any *pass_fds* forces
    *close_fds* to be :const:`True`.  (POSIX only)
 
-   .. versionchanged:: 3.2
+   .. versionadded:: 3.2
       The *pass_fds* parameter was added.
 
    If *cwd* is not ``None``, the function changes the working directory to
-   *cwd* before executing the child.  *cwd* can be a string, bytes or
+   *cwd* before executing the child.  *cwd* can be a :class:`str` and
    :term:`path-like <path-like object>` object.  In particular, the function
    looks for *executable* (or for the first item in *args*) relative to *cwd*
    if the executable path is a relative path.
 
    .. versionchanged:: 3.6
-      *cwd* parameter accepts a :term:`path-like object` on POSIX.
-
-   .. versionchanged:: 3.7
-      *cwd* parameter accepts a :term:`path-like object` on Windows.
-
-   .. versionchanged:: 3.8
-      *cwd* parameter accepts a bytes object on Windows.
+      *cwd* parameter accepts a :term:`path-like object`.
 
    If *restore_signals* is true (the default) all signals that Python has set to
    SIG_IGN are restored to SIG_DFL in the child process before the exec.
@@ -554,39 +519,6 @@ functions.
 
    .. versionchanged:: 3.2
       *start_new_session* was added.
-
-   If *group* is not ``None``, the setregid() system call will be made in the
-   child process prior to the execution of the subprocess. If the provided
-   value is a string, it will be looked up via :func:`grp.getgrnam()` and
-   the value in ``gr_gid`` will be used. If the value is an integer, it
-   will be passed verbatim. (POSIX only)
-
-   .. availability:: POSIX
-   .. versionadded:: 3.9
-
-   If *extra_groups* is not ``None``, the setgroups() system call will be
-   made in the child process prior to the execution of the subprocess.
-   Strings provided in *extra_groups* will be looked up via
-   :func:`grp.getgrnam()` and the values in ``gr_gid`` will be used.
-   Integer values will be passed verbatim. (POSIX only)
-
-   .. availability:: POSIX
-   .. versionadded:: 3.9
-
-   If *user* is not ``None``, the setreuid() system call will be made in the
-   child process prior to the execution of the subprocess. If the provided
-   value is a string, it will be looked up via :func:`pwd.getpwnam()` and
-   the value in ``pw_uid`` will be used. If the value is an integer, it will
-   be passed verbatim. (POSIX only)
-
-   .. availability:: POSIX
-   .. versionadded:: 3.9
-
-   If *umask* is not negative, the umask() system call will be made in the
-   child process prior to the execution of the subprocess.
-
-   .. availability:: POSIX
-   .. versionadded:: 3.9
 
    If *env* is not ``None``, it must be a mapping that defines the environment
    variables for the new process; these are used instead of the default
@@ -636,26 +568,12 @@ functions.
       with Popen(["ifconfig"], stdout=PIPE) as proc:
           log.write(proc.stdout.read())
 
-   .. audit-event:: subprocess.Popen executable,args,cwd,env subprocess.Popen
-
-      Popen and the other functions in this module that use it raise an
-      :ref:`auditing event <auditing>` ``subprocess.Popen`` with arguments
-      ``executable``, ``args``, ``cwd``, and ``env``. The value for ``args``
-      may be a single string or a list of strings, depending on platform.
-
    .. versionchanged:: 3.2
       Added context manager support.
 
    .. versionchanged:: 3.6
       Popen destructor now emits a :exc:`ResourceWarning` warning if the child
       process is still running.
-
-   .. versionchanged:: 3.8
-      Popen can use :func:`os.posix_spawn` in some cases for better
-      performance. On Windows Subsystem for Linux and QEMU User Emulation,
-      Popen constructor using :func:`os.posix_spawn` no longer raise an
-      exception on errors like missing program, but the child process fails
-      with a non-zero :attr:`~Popen.returncode`.
 
 
 Exceptions
@@ -666,10 +584,7 @@ execute, will be re-raised in the parent.
 
 The most common exception raised is :exc:`OSError`.  This occurs, for example,
 when trying to execute a non-existent file.  Applications should prepare for
-:exc:`OSError` exceptions. Note that, when ``shell=True``, :exc:`OSError`
-will be raised by the child only if the selected shell itself was not found.
-To determine if the shell failed to find the requested application, it is
-necessary to check the return code or output from the subprocess.
+:exc:`OSError` exceptions.
 
 A :exc:`ValueError` will be raised if :class:`Popen` is called with invalid
 arguments.
@@ -687,7 +602,6 @@ Exceptions defined in this module all inherit from :exc:`SubprocessError`.
    .. versionadded:: 3.3
       The :exc:`SubprocessError` base class was added.
 
-.. _subprocess-security:
 
 Security Considerations
 -----------------------
@@ -746,11 +660,10 @@ Instances of the :class:`Popen` class have the following methods:
 .. method:: Popen.communicate(input=None, timeout=None)
 
    Interact with process: Send data to stdin.  Read data from stdout and stderr,
-   until end-of-file is reached.  Wait for process to terminate and set the
-   :attr:`~Popen.returncode` attribute.  The optional *input* argument should be
-   data to be sent to the child process, or ``None``, if no data should be sent
-   to the child.  If streams were opened in text mode, *input* must be a string.
-   Otherwise, it must be bytes.
+   until end-of-file is reached.  Wait for process to terminate.  The optional
+   *input* argument should be data to be sent to the child process, or
+   ``None``, if no data should be sent to the child.  If streams were opened in
+   text mode, *input* must be a string.  Otherwise, it must be bytes.
 
    :meth:`communicate` returns a tuple ``(stdout_data, stderr_data)``.
    The data will be strings if streams were opened in text mode; otherwise,
@@ -788,8 +701,6 @@ Instances of the :class:`Popen` class have the following methods:
 .. method:: Popen.send_signal(signal)
 
    Sends the signal *signal* to the child.
-
-   Do nothing if the process completed.
 
    .. note::
 
@@ -1100,7 +1011,7 @@ calls these functions.
    Run the command described by *args*.  Wait for command to complete, then
    return the :attr:`~Popen.returncode` attribute.
 
-   Code needing to capture stdout or stderr should use :func:`run` instead::
+   Code needing to capture stdout or stderr should use :func:`run` instead:
 
        run(...).returncode
 
@@ -1129,10 +1040,8 @@ calls these functions.
    code was zero then return, otherwise raise :exc:`CalledProcessError`. The
    :exc:`CalledProcessError` object will have the return code in the
    :attr:`~CalledProcessError.returncode` attribute.
-   If :func:`check_call` was unable to start the process it will propagate the exception
-   that was raised.
 
-   Code needing to capture stdout or stderr should use :func:`run` instead::
+   Code needing to capture stdout or stderr should use :func:`run` instead:
 
        run(..., check=True)
 
@@ -1173,9 +1082,8 @@ calls these functions.
    The arguments shown above are merely some common ones.
    The full function signature is largely the same as that of :func:`run` -
    most arguments are passed directly through to that interface.
-   One API deviation from :func:`run` behavior exists: passing ``input=None``
-   will behave the same as ``input=b''`` (or ``input=''``, depending on other
-   arguments) rather than using the parent's standard input file handle.
+   However, explicitly passing ``input=None`` to inherit the parent's
+   standard input file handle is not supported.
 
    By default, this function will return the data as encoded bytes. The actual
    encoding of the output data may depend on the command being invoked, so the
@@ -1231,12 +1139,12 @@ In the following examples, we assume that the relevant functions have already
 been imported from the :mod:`subprocess` module.
 
 
-Replacing :program:`/bin/sh` shell command substitution
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Replacing /bin/sh shell backquote
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-   output=$(mycmd myarg)
+   output=`mycmd myarg`
 
 becomes::
 
@@ -1247,7 +1155,7 @@ Replacing shell pipeline
 
 .. code-block:: bash
 
-   output=$(dmesg | grep hda)
+   output=`dmesg | grep hda`
 
 becomes::
 
@@ -1256,15 +1164,15 @@ becomes::
    p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
    output = p2.communicate()[0]
 
-The ``p1.stdout.close()`` call after starting the p2 is important in order for
-p1 to receive a SIGPIPE if p2 exits before p1.
+The p1.stdout.close() call after starting the p2 is important in order for p1
+to receive a SIGPIPE if p2 exits before p1.
 
 Alternatively, for trusted input, the shell's own pipeline support may still
 be used directly:
 
 .. code-block:: bash
 
-   output=$(dmesg | grep hda)
+   output=`dmesg | grep hda`
 
 becomes::
 
@@ -1278,17 +1186,11 @@ Replacing :func:`os.system`
 
    sts = os.system("mycmd" + " myarg")
    # becomes
-   retcode = call("mycmd" + " myarg", shell=True)
+   sts = call("mycmd" + " myarg", shell=True)
 
 Notes:
 
 * Calling the program through the shell is usually not required.
-* The :func:`call` return value is encoded differently to that of
-  :func:`os.system`.
-
-* The :func:`os.system` function ignores SIGINT and SIGQUIT signals while
-  the command is running, but the caller must do this separately when
-  using the :mod:`subprocess` module.
 
 A more realistic example would look like this::
 

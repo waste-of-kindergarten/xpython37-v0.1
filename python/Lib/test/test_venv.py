@@ -15,12 +15,10 @@ import subprocess
 import sys
 import tempfile
 from test.support import (captured_stdout, captured_stderr, requires_zlib,
-                          can_symlink, EnvironmentVarGuard, rmtree,
-                          import_module,
-                          skip_if_broken_multiprocessing_synchronize)
+                          can_symlink, EnvironmentVarGuard, rmtree)
+import threading
 import unittest
 import venv
-from unittest.mock import patch
 
 try:
     import ctypes
@@ -30,8 +28,8 @@ except ImportError:
 # Platforms that set sys._base_executable can create venvs from within
 # another venv, so no need to skip tests that require venv.create().
 requireVenvCreate = unittest.skipUnless(
-    sys.prefix == sys.base_prefix
-    or sys._base_executable != sys.executable,
+    hasattr(sys, '_base_executable')
+    or sys.prefix == sys.base_prefix,
     'cannot run venv.create from within a venv on this platform')
 
 def check_output(cmd, encoding=None):
@@ -59,7 +57,7 @@ class BaseTest(unittest.TestCase):
             self.bindir = 'bin'
             self.lib = ('lib', 'python%d.%d' % sys.version_info[:2])
             self.include = 'include'
-        executable = sys._base_executable
+        executable = getattr(sys, '_base_executable', sys.executable)
         self.exe = os.path.split(executable)[-1]
         if (sys.platform == 'win32'
             and os.path.lexists(executable)
@@ -80,8 +78,8 @@ class BaseTest(unittest.TestCase):
     def get_env_file(self, *args):
         return os.path.join(self.env_dir, *args)
 
-    def get_text_file_contents(self, *args, encoding='utf-8'):
-        with open(self.get_env_file(*args), 'r', encoding=encoding) as f:
+    def get_text_file_contents(self, *args):
+        with open(self.get_env_file(*args), 'r') as f:
             result = f.read()
         return result
 
@@ -110,7 +108,7 @@ class BasicTest(BaseTest):
         else:
             self.assertFalse(os.path.exists(p))
         data = self.get_text_file_contents('pyvenv.cfg')
-        executable = sys._base_executable
+        executable = getattr(sys, '_base_executable', sys.executable)
         path = os.path.dirname(executable)
         self.assertIn('home = %s' % path, data)
         fn = self.get_env_file(self.bindir, self.exe)
@@ -123,60 +121,13 @@ class BasicTest(BaseTest):
     def test_prompt(self):
         env_name = os.path.split(self.env_dir)[1]
 
-        rmtree(self.env_dir)
         builder = venv.EnvBuilder()
-        self.run_with_capture(builder.create, self.env_dir)
         context = builder.ensure_directories(self.env_dir)
-        data = self.get_text_file_contents('pyvenv.cfg')
         self.assertEqual(context.prompt, '(%s) ' % env_name)
-        self.assertNotIn("prompt = ", data)
 
-        rmtree(self.env_dir)
         builder = venv.EnvBuilder(prompt='My prompt')
-        self.run_with_capture(builder.create, self.env_dir)
         context = builder.ensure_directories(self.env_dir)
-        data = self.get_text_file_contents('pyvenv.cfg')
         self.assertEqual(context.prompt, '(My prompt) ')
-        self.assertIn("prompt = 'My prompt'\n", data)
-
-        rmtree(self.env_dir)
-        builder = venv.EnvBuilder(prompt='.')
-        cwd = os.path.basename(os.getcwd())
-        self.run_with_capture(builder.create, self.env_dir)
-        context = builder.ensure_directories(self.env_dir)
-        data = self.get_text_file_contents('pyvenv.cfg')
-        self.assertEqual(context.prompt, '(%s) ' % cwd)
-        self.assertIn("prompt = '%s'\n" % cwd, data)
-
-    def test_upgrade_dependencies(self):
-        builder = venv.EnvBuilder()
-        bin_path = 'Scripts' if sys.platform == 'win32' else 'bin'
-        python_exe = os.path.split(sys.executable)[1]
-        with tempfile.TemporaryDirectory() as fake_env_dir:
-            expect_exe = os.path.normcase(
-                os.path.join(fake_env_dir, bin_path, python_exe)
-            )
-            if sys.platform == 'win32':
-                expect_exe = os.path.normcase(os.path.realpath(expect_exe))
-
-            def pip_cmd_checker(cmd):
-                cmd[0] = os.path.normcase(cmd[0])
-                self.assertEqual(
-                    cmd,
-                    [
-                        expect_exe,
-                        '-m',
-                        'pip',
-                        'install',
-                        '--upgrade',
-                        'pip',
-                        'setuptools'
-                    ]
-                )
-
-            fake_context = builder.ensure_directories(fake_env_dir)
-            with patch('venv.subprocess.check_call', pip_cmd_checker):
-                builder.upgrade_dependencies(fake_context)
 
     @requireVenvCreate
     def test_prefixes(self):
@@ -190,7 +141,7 @@ class BasicTest(BaseTest):
         cmd = [envpy, '-c', None]
         for prefix, expected in (
             ('prefix', self.env_dir),
-            ('exec_prefix', self.env_dir),
+            ('prefix', self.env_dir),
             ('base_prefix', sys.base_prefix),
             ('base_exec_prefix', sys.base_exec_prefix)):
             cmd[2] = 'import sys; print(sys.%s)' % prefix
@@ -364,11 +315,6 @@ class BasicTest(BaseTest):
         """
         Test that the multiprocessing is able to spawn.
         """
-        # bpo-36342: Instantiation of a Pool object imports the
-        # multiprocessing.synchronize module. Skip the test if this module
-        # cannot be imported.
-        skip_if_broken_multiprocessing_synchronize()
-
         rmtree(self.env_dir)
         self.run_with_capture(venv.create, self.env_dir)
         envpy = os.path.join(os.path.realpath(self.env_dir),
@@ -445,7 +391,11 @@ class EnsurePipTest(BaseTest):
         with open(os.devnull, "rb") as f:
             self.assertEqual(f.read(), b"")
 
-        self.assertTrue(os.path.exists(os.devnull))
+        # Issue #20541: os.path.exists('nul') is False on Windows
+        if os.devnull.lower() == 'nul':
+            self.assertFalse(os.path.exists(os.devnull))
+        else:
+            self.assertTrue(os.path.exists(os.devnull))
 
     def do_test_with_pip(self, system_site_packages):
         rmtree(self.env_dir)
@@ -538,7 +488,7 @@ class EnsurePipTest(BaseTest):
 
     # Issue #26610: pip/pep425tags.py requires ctypes
     @unittest.skipUnless(ctypes, 'pip requires ctypes')
-    @requires_zlib()
+    @requires_zlib
     def test_with_pip(self):
         self.do_test_with_pip(False)
         self.do_test_with_pip(True)

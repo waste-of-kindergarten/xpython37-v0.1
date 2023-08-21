@@ -26,6 +26,8 @@ Copyright (C) 1994 Steen Lumholt.
 #include "Python.h"
 #include <ctype.h>
 
+#include "pythread.h"
+
 #ifdef MS_WINDOWS
 #include <windows.h>
 #endif
@@ -54,7 +56,7 @@ Copyright (C) 1994 Steen Lumholt.
 
 #if TK_HEX_VERSION >= 0x08050208 && TK_HEX_VERSION < 0x08060000 || \
     TK_HEX_VERSION >= 0x08060200
-#define HAVE_LIBTOMMATH
+#define HAVE_LIBTOMMAMTH
 #include <tclTomMath.h>
 #endif
 
@@ -246,15 +248,12 @@ static PyThreadState *tcl_tstate = NULL;
 #endif
 
 #define ENTER_TCL \
-    { PyThreadState *tstate = PyThreadState_Get(); \
-      Py_BEGIN_ALLOW_THREADS \
-      if(tcl_lock)PyThread_acquire_lock(tcl_lock, 1); \
-      tcl_tstate = tstate;
+    { PyThreadState *tstate = PyThreadState_Get(); Py_BEGIN_ALLOW_THREADS \
+        if(tcl_lock)PyThread_acquire_lock(tcl_lock, 1); tcl_tstate = tstate;
 
 #define LEAVE_TCL \
     tcl_tstate = NULL; \
-    if(tcl_lock)PyThread_release_lock(tcl_lock); \
-    Py_END_ALLOW_THREADS}
+    if(tcl_lock)PyThread_release_lock(tcl_lock); Py_END_ALLOW_THREADS}
 
 #define ENTER_OVERLAP \
     Py_END_ALLOW_THREADS
@@ -264,14 +263,12 @@ static PyThreadState *tcl_tstate = NULL;
 
 #define ENTER_PYTHON \
     { PyThreadState *tstate = tcl_tstate; tcl_tstate = NULL; \
-      if(tcl_lock) \
-        PyThread_release_lock(tcl_lock); \
-      PyEval_RestoreThread((tstate)); }
+        if(tcl_lock) \
+          PyThread_release_lock(tcl_lock); PyEval_RestoreThread((tstate)); }
 
 #define LEAVE_PYTHON \
     { PyThreadState *tstate = PyEval_SaveThread(); \
-      if(tcl_lock)PyThread_acquire_lock(tcl_lock, 1); \
-      tcl_tstate = tstate; }
+        if(tcl_lock)PyThread_acquire_lock(tcl_lock, 1); tcl_tstate = tstate; }
 
 #define CHECK_TCL_APPARTMENT \
     if (((TkappObject *)self)->threaded && \
@@ -400,8 +397,7 @@ unicodeFromTclStringAndSize(const char *s, Py_ssize_t size)
 
     char *buf = NULL;
     PyErr_Clear();
-    /* Tcl encodes null character as \xc0\x80.
-       https://en.wikipedia.org/wiki/UTF-8#Modified_UTF-8 */
+    /* Tcl encodes null character as \xc0\x80 */
     if (memchr(s, '\xc0', size)) {
         char *q;
         const char *e = s + size;
@@ -425,57 +421,6 @@ unicodeFromTclStringAndSize(const char *s, Py_ssize_t size)
     if (buf != NULL) {
         PyMem_Free(buf);
     }
-    if (r == NULL || PyUnicode_KIND(r) == PyUnicode_1BYTE_KIND) {
-        return r;
-    }
-
-    /* In CESU-8 non-BMP characters are represented as a surrogate pair,
-       like in UTF-16, and then each surrogate code point is encoded in UTF-8.
-       https://en.wikipedia.org/wiki/CESU-8 */
-    Py_ssize_t len = PyUnicode_GET_LENGTH(r);
-    Py_ssize_t i, j;
-    /* All encoded surrogate characters start with \xED. */
-    i = PyUnicode_FindChar(r, 0xdcED, 0, len, 1);
-    if (i == -2) {
-        Py_DECREF(r);
-        return NULL;
-    }
-    if (i == -1) {
-        return r;
-    }
-    Py_UCS4 *u = PyUnicode_AsUCS4Copy(r);
-    Py_DECREF(r);
-    if (u == NULL) {
-        return NULL;
-    }
-    Py_UCS4 ch;
-    for (j = i; i < len; i++, u[j++] = ch) {
-        Py_UCS4 ch1, ch2, ch3, high, low;
-        /* Low surrogates U+D800 - U+DBFF are encoded as
-           \xED\xA0\x80 - \xED\xAF\xBF. */
-        ch1 = ch = u[i];
-        if (ch1 != 0xdcED) continue;
-        ch2 = u[i + 1];
-        if (!(0xdcA0 <= ch2 && ch2 <= 0xdcAF)) continue;
-        ch3 = u[i + 2];
-        if (!(0xdc80 <= ch3 && ch3 <= 0xdcBF)) continue;
-        high = 0xD000 | ((ch2 & 0x3F) << 6) | (ch3 & 0x3F);
-        assert(Py_UNICODE_IS_HIGH_SURROGATE(high));
-        /* High surrogates U+DC00 - U+DFFF are encoded as
-           \xED\xB0\x80 - \xED\xBF\xBF. */
-        ch1 = u[i + 3];
-        if (ch1 != 0xdcED) continue;
-        ch2 = u[i + 4];
-        if (!(0xdcB0 <= ch2 && ch2 <= 0xdcBF)) continue;
-        ch3 = u[i + 5];
-        if (!(0xdc80 <= ch3 && ch3 <= 0xdcBF)) continue;
-        low = 0xD000 | ((ch2 & 0x3F) << 6) | (ch3 & 0x3F);
-        assert(Py_UNICODE_IS_HIGH_SURROGATE(high));
-        ch = Py_UNICODE_JOIN_SURROGATES(high, low);
-        i += 5;
-    }
-    r = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, u, j);
-    PyMem_Free(u);
     return r;
 }
 
@@ -629,9 +574,9 @@ SplitObj(PyObject *arg)
     else if (PyBytes_Check(arg)) {
         int argc;
         const char **argv;
-        const char *list = PyBytes_AS_STRING(arg);
+        char *list = PyBytes_AS_STRING(arg);
 
-        if (Tcl_SplitList((Tcl_Interp *)NULL, (char *)list, &argc, &argv) != TCL_OK) {
+        if (Tcl_SplitList((Tcl_Interp *)NULL, list, &argc, &argv) != TCL_OK) {
             Py_INCREF(arg);
             return arg;
         }
@@ -713,6 +658,7 @@ Tkapp_New(const char *screenName, const char *className,
     v = PyObject_New(TkappObject, (PyTypeObject *) Tkapp_Type);
     if (v == NULL)
         return NULL;
+    Py_INCREF(Tkapp_Type);
 
     v->interp = Tcl_CreateInterp();
     v->wantobjects = wantobjects;
@@ -767,8 +713,8 @@ Tkapp_New(const char *screenName, const char *className,
     }
 
     strcpy(argv0, className);
-    if (Py_ISUPPER(argv0[0]))
-        argv0[0] = Py_TOLOWER(argv0[0]);
+    if (Py_ISUPPER(Py_CHARMASK(argv0[0])))
+        argv0[0] = Py_TOLOWER(Py_CHARMASK(argv0[0]));
     Tcl_SetVar(v->interp, "argv0", argv0, TCL_GLOBAL_ONLY);
     PyMem_Free(argv0);
 
@@ -888,7 +834,7 @@ typedef struct {
 } PyTclObject;
 
 static PyObject *PyTclObject_Type;
-#define PyTclObject_Check(v) Py_IS_TYPE(v, (PyTypeObject *) PyTclObject_Type)
+#define PyTclObject_Check(v) ((v)->ob_type == (PyTypeObject *) PyTclObject_Type)
 
 static PyObject *
 newPyTclObject(Tcl_Obj *arg)
@@ -897,6 +843,7 @@ newPyTclObject(Tcl_Obj *arg)
     self = PyObject_New(PyTclObject, (PyTypeObject *) PyTclObject_Type);
     if (self == NULL)
         return NULL;
+    Py_INCREF(PyTclObject_Type);
     Tcl_IncrRefCount(arg);
     self->value = arg;
     self->string = NULL;
@@ -936,7 +883,7 @@ PyTclObject_str(PyTclObject *self)
         Py_INCREF(self->string);
         return self->string;
     }
-    /* XXX Could cache result if it is non-ASCII. */
+    /* XXX Could chache result if it is non-ASCII. */
     return unicodeFromTclObj(self->value);
 }
 
@@ -1022,7 +969,7 @@ static PyType_Spec PyTclObject_Type_spec = {
 #define CHECK_STRING_LENGTH(s)
 #endif
 
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
 static Tcl_Obj*
 asBignumObj(PyObject *value)
 {
@@ -1102,7 +1049,7 @@ AsObj(PyObject *value)
 #endif
         /* If there is an overflow in the wideInt conversion,
            fall through to bignum handling. */
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
         return asBignumObj(value);
 #endif
         /* If there is no wideInt or bignum support,
@@ -1224,7 +1171,7 @@ fromWideIntObj(TkappObject *tkapp, Tcl_Obj *value)
         return NULL;
 }
 
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
 static PyObject*
 fromBignumObj(TkappObject *tkapp, Tcl_Obj *value)
 {
@@ -1304,7 +1251,7 @@ FromObj(TkappObject *tkapp, Tcl_Obj *value)
            fall through to bignum handling. */
     }
 
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
     if (value->typePtr == tkapp->IntType ||
         value->typePtr == tkapp->WideIntType ||
         value->typePtr == tkapp->BignumType) {
@@ -1357,7 +1304,7 @@ FromObj(TkappObject *tkapp, Tcl_Obj *value)
     }
 #endif
 
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
     if (tkapp->BignumType == NULL &&
         strcmp(value->typePtr->name, "bignum") == 0) {
         /* bignum type is not registered in Tcl */
@@ -1789,7 +1736,7 @@ varname_converter(PyObject *in, void *_out)
     }
     PyErr_Format(PyExc_TypeError,
                  "must be str, bytes or Tcl_Obj, not %.50s",
-                 Py_TYPE(in)->tp_name);
+                 in->ob_type->tp_name);
     return 0;
 }
 
@@ -2058,7 +2005,7 @@ _tkinter_tkapp_getint(TkappObject *self, PyObject *arg)
        Prefer bignum because Tcl_GetWideIntFromObj returns ambiguous result for
        value in ranges -2**64..-2**63-1 and 2**63..2**64-1 (on 32-bit platform).
      */
-#ifdef HAVE_LIBTOMMATH
+#ifdef HAVE_LIBTOMMAMTH
     result = fromBignumObj(self, value);
 #else
     result = fromWideIntObj(self, value);
@@ -2221,9 +2168,11 @@ _tkinter_tkapp_exprdouble_impl(TkappObject *self, const char *s)
 
     CHECK_STRING_LENGTH(s);
     CHECK_TCL_APPARTMENT;
+    PyFPE_START_PROTECT("Tkapp_ExprDouble", return 0)
     ENTER_TCL
     retval = Tcl_ExprDouble(Tkapp_Interp(self), s, &v);
     ENTER_OVERLAP
+    PyFPE_END_PROTECT(retval)
     if (retval == TCL_ERROR)
         res = Tkinter_Error(self);
     else
@@ -2356,12 +2305,6 @@ _tkinter_tkapp_split(TkappObject *self, PyObject *arg)
 {
     PyObject *v;
     char *list;
-
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
-            "split() is deprecated; consider using splitlist() instead", 1))
-    {
-        return NULL;
-    }
 
     if (PyTclObject_Check(arg)) {
         Tcl_Obj *value = ((PyTclObject*)arg)->value;
@@ -2809,6 +2752,7 @@ Tktt_New(PyObject *func)
     v = PyObject_New(TkttObject, (PyTypeObject *) Tktt_Type);
     if (v == NULL)
         return NULL;
+    Py_INCREF(Tktt_Type);
 
     Py_INCREF(func);
     v->token = NULL;
@@ -2857,7 +2801,7 @@ TimerHandler(ClientData clientData)
 
     ENTER_PYTHON
 
-    res = PyObject_CallNoArgs(func);
+    res = _PyObject_CallNoArg(func);
     Py_DECREF(func);
     Py_DECREF(v); /* See Tktt_New() */
 
@@ -3197,10 +3141,8 @@ _tkinter__flatten(PyObject *module, PyObject *item)
 
     context.size = 0;
 
-    if (!_flatten1(&context, item, 0)) {
-        Py_XDECREF(context.tuple);
+    if (!_flatten1(&context, item,0))
         return NULL;
-    }
 
     if (_PyTuple_Resize(&context.tuple, context.size))
         return NULL;
@@ -3211,8 +3153,8 @@ _tkinter__flatten(PyObject *module, PyObject *item)
 /*[clinic input]
 _tkinter.create
 
-    screenName: str(accept={str, NoneType}) = None
-    baseName: str = ""
+    screenName: str(accept={str, NoneType}) = NULL
+    baseName: str = NULL
     className: str = "Tk"
     interactive: bool(accept={int}) = False
     wantobjects: bool(accept={int}) = False
@@ -3220,7 +3162,7 @@ _tkinter.create
         if false, then Tk_Init() doesn't get called
     sync: bool(accept={int}) = False
         if true, then pass -sync to wish
-    use: str(accept={str, NoneType}) = None
+    use: str(accept={str, NoneType}) = NULL
         if not None, then pass -use to wish
     /
 
@@ -3231,7 +3173,7 @@ _tkinter_create_impl(PyObject *module, const char *screenName,
                      const char *baseName, const char *className,
                      int interactive, int wantobjects, int wantTk, int sync,
                      const char *use)
-/*[clinic end generated code: output=e3315607648e6bb4 input=da9b17ee7358d862]*/
+/*[clinic end generated code: output=e3315607648e6bb4 input=431907c134c80085]*/
 {
     /* XXX baseName is not used anymore;
      * try getting rid of it. */
